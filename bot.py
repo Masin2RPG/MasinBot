@@ -1,6 +1,7 @@
 
 
 import logging
+import re
 from typing import Optional
 
 import discord
@@ -102,25 +103,29 @@ class SaveCodeBot:
                 await ctx.send(f"❌ 아이템 추출 중 오류 발생: {e}")
         
         @self.bot.command(name='로드', help='세이브코드를 검증하고 아이템을 추출합니다')
-        async def load_command(ctx: commands.Context, code: str, *, name: str):
+        async def load_command(ctx: commands.Context, name: str, *, code: str):
             """세이브코드 검증 및 아이템 추출 명령어"""
             if not code or not name:
                 await ctx.send("❌ 코드와 이름을 모두 입력해주세요.")
                 return
             
             try:
+                raw_codes = re.split(r'[;\n,]+|\s{1,}', code.strip()) 
+                codes = [c.strip().upper() for c in raw_codes if c.strip()]
+                for code in codes:
+                    print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
                 # 검증
-                is_valid = decode_savecode2(code, name)
-                result = "✅ 유효함" if is_valid else "❌ 유효하지 않음"
-                
-                # 아이템 추출
-                items_list = self.decoder.extract_items(code)
-                response = "\n".join(items_list)
-                
-                # 결과 전송
-                await ctx.send(f"**검증 결과:** {result}")
-                if items_list:
-                    await ctx.send(f"**세이브코드 아이템 추출 결과:**\n```\n{response}\n```")
+                    is_valid = decode_savecode2(code, name)
+                    result = "✅ 유효함" if is_valid else "❌ 유효하지 않음"
+                    
+                    # 아이템 추출
+                    items_list = self.decoder.extract_items(code)
+                    response = "\n".join(items_list)
+                    
+                    # 결과 전송
+                    await ctx.send(f"**검증 결과:** {result}")
+                    if items_list:
+                        await ctx.send(f"**세이브코드 아이템 추출 결과:**\n```\n{response}\n```")
                 
             except Exception as e:
                 logger.error(f"로드 처리 중 오류: {e}")
@@ -148,7 +153,7 @@ class SaveCodeBot:
             )
             
             embed.add_field(
-                name="/로드 <코드> <이름>",
+                name="/로드 <이름> <코드>",
                 value="세이브코드를 검증하고 아이템을 추출합니다.",
                 inline=False
             )
