@@ -1,5 +1,6 @@
 
 
+import json
 import logging
 import re
 from typing import Optional
@@ -10,6 +11,7 @@ from discord.ext import commands
 # 로컬 모듈 임포트
 from config import Config
 from decoder import SaveCodeDecoder
+from item_searcher import ItemSearcher
 from savecode_decoder import decode_savecode2
 
 # 로깅 설정
@@ -25,6 +27,7 @@ class SaveCodeBot:
     def __init__(self):
         self.config = Config()
         self.decoder = SaveCodeDecoder()
+        self.item_searcher = ItemSearcher()  # 아이템 검색기 초기화
         
         # 봇 인텐트 설정
         intents = discord.Intents.default()
@@ -131,6 +134,80 @@ class SaveCodeBot:
                 logger.error(f"로드 처리 중 오류: {e}")
                 await ctx.send(f"❌ 로드 처리 중 오류 발생: {e}")
         
+        @self.bot.command(name='값', help='아이템 이름으로 해당 아이템의 정수 값을 찾습니다')
+        async def value_command(ctx: commands.Context, *, item_name: str):
+            """아이템 이름으로 값을 찾는 명령어"""
+            if not item_name:
+                await ctx.send("❌ 아이템 이름을 입력해주세요.")
+                return
+            
+            try:
+                # 매칭되는 아이템들 찾기
+                matching_items = self.item_searcher.find_matching_items(item_name)
+                
+                if not matching_items:
+                    await ctx.send(f"❌ '{item_name}'과(와) 일치하는 아이템을 찾을 수 없습니다.")
+                    return
+                
+                if len(matching_items) == 1:
+                    # 하나만 찾았을 때
+                    key, item_info, value = matching_items[0]
+                    embed = discord.Embed(
+                        title="🔍 아이템 값 조회 결과",
+                        color=0x00ff00
+                    )
+                    embed.add_field(name="아이템명", value=item_info, inline=False)
+                    embed.add_field(name="정수값", value=f"```{value}```", inline=False)
+                    await ctx.send(embed=embed)
+                else:
+                    # 여러 개 찾았을 때
+                    response = f"**'{item_name}'로 검색된 아이템들:**\n"
+                    for i, (key, item_info, value) in enumerate(matching_items[:5], 1):  # 최대 5개만 표시
+                        clean_name = self.item_searcher._clean_item_name(item_info)[:50]  # 50자로 제한
+                        response += f"{i}. `{clean_name}` - 값: `{value}`\n"
+                    
+                    if len(matching_items) > 5:
+                        response += f"\n... 그 외 {len(matching_items) - 5}개 더 있습니다."
+                    
+                    await ctx.send(response)
+                
+            except Exception as e:
+                logger.error(f"아이템 값 검색 중 오류: {e}")
+                await ctx.send(f"❌ 아이템 값 검색 중 오류 발생: {e}")
+        
+        @self.bot.command(name='통계', help='아이템 데이터베이스 통계를 표시합니다')
+        async def stats_command(ctx: commands.Context):
+            """아이템 데이터베이스 통계 명령어"""
+            try:
+                stats = self.item_searcher.get_stats()
+                
+                embed = discord.Embed(
+                    title="📊 아이템 데이터베이스 통계",
+                    color=0x3498db
+                )
+                
+                embed.add_field(
+                    name="총 아이템 수", 
+                    value=f"```{stats['total_items']:,}개```", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="총 값 개수", 
+                    value=f"```{stats['total_rowcodes']:,}개```", 
+                    inline=True
+                )
+                embed.add_field(
+                    name="매칭된 아이템", 
+                    value=f"```{stats['matched_items']:,}개```", 
+                    inline=True
+                )
+                
+                await ctx.send(embed=embed)
+                
+            except Exception as e:
+                logger.error(f"통계 조회 중 오류: {e}")
+                await ctx.send(f"❌ 통계 조회 중 오류 발생: {e}")
+        
         @self.bot.command(name='도움말', help='사용 가능한 명령어를 보여줍니다')
         async def help_command(ctx: commands.Context):
             """도움말 명령어"""
@@ -155,6 +232,18 @@ class SaveCodeBot:
             embed.add_field(
                 name="/로드 <이름> <코드>",
                 value="세이브코드를 검증하고 아이템을 추출합니다.",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/값 <아이템이름>",
+                value="아이템 이름으로 해당 아이템의 정수 값을 찾습니다.",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/통계",
+                value="아이템 데이터베이스의 통계 정보를 표시합니다.",
                 inline=False
             )
             
