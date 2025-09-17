@@ -357,6 +357,65 @@ class SaveCodeBot:
                 logger.error(f"코어 최적화 중 오류: {e}")
                 await ctx.send(f"❌ 코어 최적화 중 오류 발생: {e}")
         
+        @self.bot.command(name='젬', help='UI 형태로 코어 최적화를 수행합니다')
+        async def gem_command(ctx: commands.Context, *args):
+            """UI 형태의 코어 최적화 명령어"""
+            if not args:
+                await ctx.send("❌ 코어 타입과 잼 정보를 입력해주세요.\n**사용법:**\n• 단일: `/젬 전설 25 35 45`\n• 멀티: `/젬 전설 유물 유물 33 55 44`")
+                return
+            
+            try:
+                # 유효한 코어 타입들
+                valid_cores = ["전설", "유물", "고대"]
+                
+                # 앞부분에서 코어 타입들과 뒷부분의 잼들을 분리
+                core_types = []
+                gems = []
+                
+                # 앞에서부터 유효한 코어 타입인지 확인
+                for i, arg in enumerate(args):
+                    if arg in valid_cores:
+                        core_types.append(arg)
+                    else:
+                        # 첫 번째 비-코어 타입부터는 모두 잼으로 간주
+                        gems = list(args[i:])
+                        break
+                
+                if not core_types:
+                    await ctx.send(f"❌ 올바른 코어 타입을 입력해주세요: {', '.join(valid_cores)}")
+                    return
+                
+                if not gems:
+                    await ctx.send("❌ 잼 정보를 입력해주세요. (예: 25 35 45)")
+                    return
+                
+                # 단일 코어 vs 멀티 코어 처리
+                if len(core_types) == 1:
+                    # 단일 코어 최적화
+                    result = self.core_optimizer.find_optimal_combination(core_types[0], gems)
+                    
+                    if "error" in result:
+                        await ctx.send(f"❌ {result['error']}")
+                        return
+                    
+                    # UI 스타일 단일 코어 결과
+                    await self._send_ui_single_core_result(ctx, result)
+                    
+                else:
+                    # 멀티 코어 최적화
+                    result = self.core_optimizer.optimize_multiple_cores(core_types, gems)
+                    
+                    if "error" in result:
+                        await ctx.send(f"❌ {result['error']}")
+                        return
+                    
+                    # UI 스타일 멀티 코어 결과
+                    await self._send_ui_multi_core_result(ctx, result, core_types)
+                
+            except Exception as e:
+                logger.error(f"젬 최적화 중 오류: {e}")
+                await ctx.send(f"❌ 젬 최적화 중 오류 발생: {e}")
+        
         @self.bot.command(name='도움말', help='사용 가능한 명령어를 보여줍니다')
         async def help_command(ctx: commands.Context):
             """도움말 명령어"""
@@ -403,12 +462,181 @@ class SaveCodeBot:
             )
             
             embed.add_field(
+                name="/젬 <타입> <잼1> <잼2> ...",
+                value="UI 스타일로 코어 최적화를 수행합니다.\n**사용법:** `/젬 전설 25 35 45` 또는 `/젬 전설 유물 25 35 45`\n\n**특징:**\n• 시각적 진행바와 상태 표시\n• 각 코어별 상세 정보 카드\n• 능력 활성화 상태 시각화",
+                inline=False
+            )
+            
+            embed.add_field(
                 name="/도움말",
                 value="이 도움말을 표시합니다.",
                 inline=False
             )
             
             await ctx.send(embed=embed)
+    
+    async def _send_ui_single_core_result(self, ctx, result):
+        """UI 스타일 단일 코어 결과 전송"""
+        # 메인 정보 카드
+        main_embed = discord.Embed(
+            title="🎮 젬 최적화 UI",
+            description=f"**{result['core_type']} 코어** 최적화 결과",
+            color=0x2ecc71
+        )
+        
+        # 코어 정보 섹션
+        core_info = f"""
+```yaml
+타입: {result['core_type']}
+의지력: {result['core_willpower']}
+사용된 의지력: {result['total_willpower_used']}
+남은 의지력: {result['remaining_willpower']}
+```"""
+        main_embed.add_field(name="🔮 코어 정보", value=core_info, inline=True)
+        
+        # 잼 정보 섹션
+        gem_info = f"""
+```yaml
+선택된 잼: {', '.join(result['gems'])}
+잼 개수: {result['gem_count']}개
+질서포인트: {result['total_order_points']}
+```"""
+        main_embed.add_field(name="💎 잼 정보", value=gem_info, inline=True)
+        
+        # 능력 정보 섹션
+        activated = ', '.join(map(str, result['activated_abilities'])) if result['activated_abilities'] else '없음'
+        all_abilities = ', '.join(map(str, result['all_abilities']))
+        efficiency = len(result['activated_abilities']) / len(result['all_abilities']) * 100
+        
+        ability_info = f"""
+```yaml
+활성화된 능력: {activated}
+모든 능력: {all_abilities}
+효율성: {efficiency:.1f}%
+```"""
+        main_embed.add_field(name="⚡ 능력 상태", value=ability_info, inline=False)
+        
+        # 진행바 스타일 의지력 사용량
+        willpower_bar = self._create_progress_bar(result['total_willpower_used'], result['core_willpower'], 20)
+        main_embed.add_field(
+            name="📊 의지력 사용량", 
+            value=f"```{willpower_bar}```\n`{result['total_willpower_used']}/{result['core_willpower']}`", 
+            inline=False
+        )
+        
+        # 능력 활성화 시각화
+        ability_visual = self._create_ability_visual(result['all_abilities'], result['activated_abilities'])
+        main_embed.add_field(name="🎯 능력 활성화 상태", value=ability_visual, inline=False)
+        
+        main_embed.set_footer(text="💡 /젬 명령어로 UI 스타일 최적화를 사용하세요!")
+        await ctx.send(embed=main_embed)
+    
+    async def _send_ui_multi_core_result(self, ctx, result, core_types):
+        """UI 스타일 멀티 코어 결과 전송"""
+        # 메인 대시보드
+        main_embed = discord.Embed(
+            title="🎮 멀티 젬 최적화 UI",
+            description=f"**{len(core_types)}개 코어** 동시 최적화 결과",
+            color=0x9b59b6
+        )
+        
+        # 전체 요약 섹션
+        total_gems_used = result['total_gems_used']
+        total_available = result['total_available_gems']
+        usage_percentage = (total_gems_used / total_available * 100) if total_available > 0 else 0
+        
+        summary_info = f"""
+```yaml
+코어 개수: {len(core_types)}개
+사용된 잼: {total_gems_used}/{total_available}개
+잼 사용률: {usage_percentage:.1f}%
+```"""
+        main_embed.add_field(name="📊 전체 요약", value=summary_info, inline=False)
+        
+        # 잼 사용량 진행바
+        gem_usage_bar = self._create_progress_bar(total_gems_used, total_available, 25)
+        main_embed.add_field(
+            name="💎 잼 사용량", 
+            value=f"```{gem_usage_bar}```", 
+            inline=False
+        )
+        
+        await ctx.send(embed=main_embed)
+        
+        # 각 코어별 상세 정보 카드들
+        for i, core_result in enumerate(result['cores']):
+            if core_result['gem_count'] > 0:
+                # 잼이 할당된 코어
+                core_embed = discord.Embed(
+                    title=f"🔮 {core_result['core_type']} 코어 #{i+1}",
+                    color=self._get_core_color(core_result['core_type'])
+                )
+                
+                # 코어 상태
+                core_status = f"""
+```yaml
+잼: {', '.join(core_result['gems'])}
+잼 개수: {core_result['gem_count']}/4개
+의지력 사용: {core_result['total_willpower_used']}
+질서포인트: {core_result['total_order_points']}
+```"""
+                core_embed.add_field(name="📋 상태", value=core_status, inline=False)
+                
+                # 활성화된 능력
+                if core_result['activated_abilities']:
+                    activated_str = ', '.join(map(str, core_result['activated_abilities']))
+                    core_embed.add_field(name="⚡ 활성화된 능력", value=f"`{activated_str}`", inline=True)
+                
+                # 능력 효율성
+                total_abilities = len(core_result['all_abilities'])
+                activated_count = len(core_result['activated_abilities'])
+                efficiency = (activated_count / total_abilities * 100) if total_abilities > 0 else 0
+                
+                efficiency_bar = self._create_progress_bar(activated_count, total_abilities, 15)
+                core_embed.add_field(
+                    name="📈 효율성", 
+                    value=f"```{efficiency_bar}```\n`{efficiency:.1f}% ({activated_count}/{total_abilities})`", 
+                    inline=True
+                )
+                
+                await ctx.send(embed=core_embed)
+            else:
+                # 잼이 할당되지 않은 코어
+                empty_embed = discord.Embed(
+                    title=f"🔮 {core_result['core_type']} 코어 #{i+1}",
+                    description="```yaml\n상태: 잼 없음\n질서포인트: 0\n활성화된 능력: 없음\n```",
+                    color=0x95a5a6
+                )
+                await ctx.send(embed=empty_embed)
+    
+    def _create_progress_bar(self, current, maximum, length=20):
+        """진행바 생성"""
+        if maximum == 0:
+            return "▱" * length
+        
+        filled = int((current / maximum) * length)
+        bar = "▰" * filled + "▱" * (length - filled)
+        return bar
+    
+    def _create_ability_visual(self, all_abilities, activated_abilities):
+        """능력 활성화 시각적 표시"""
+        visual = "```\n"
+        for ability in all_abilities:
+            if ability in activated_abilities:
+                visual += f"🟢 {ability}  "
+            else:
+                visual += f"⚪ {ability}  "
+        visual += "\n```"
+        return visual
+    
+    def _get_core_color(self, core_type):
+        """코어 타입별 색상"""
+        colors = {
+            "전설": 0xf39c12,  # 주황색
+            "유물": 0x9b59b6,  # 보라색
+            "고대": 0xe74c3c   # 빨간색
+        }
+        return colors.get(core_type, 0x95a5a6)
     
     def run(self):
         """봇 실행"""
