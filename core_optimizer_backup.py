@@ -186,7 +186,7 @@ class CoreOptimizer:
         results.sort(key=lambda x: x["score"], reverse=True)
         return results
     
-    def optimize_multiple_cores(self, core_types: List[str], gem_strings: List[str], target_points: List[int] = None) -> Dict:
+    def optimize_multiple_cores(self, core_types: List[str], gem_strings: List[str], target_points: List[int] = None, priorities: List[int] = None) -> Dict:
         """
         여러 코어에 잼을 최적으로 분배하는 함수
         
@@ -194,6 +194,7 @@ class CoreOptimizer:
             core_types: 코어 타입들의 리스트 (예: ["전설", "유물", "유물"])
             gem_strings: 잼 문자열들의 리스트
             target_points: 각 코어별 목표 질서 포인트 (선택사항)
+            priorities: 각 코어별 우선순위 (1이 가장 높음, 선택사항)
             
         Returns:
             최적화 결과 딕셔너리
@@ -212,10 +213,13 @@ class CoreOptimizer:
             if not core_data:
                 return {"error": f"알 수 없는 코어 타입: {core_type}"}
             
+            # 우선순위 추가 (기본값은 인덱스 + 1)
+            priority = priorities[i] if priorities and i < len(priorities) else i + 1
             cores.append({
                 "index": i, 
                 "type": core_type, 
-                "data": core_data
+                "data": core_data,
+                "priority": priority
             })
         
         # 잼 파싱
@@ -252,102 +256,42 @@ class CoreOptimizer:
         
         return best_allocation
     
-    def _greedy_allocation(self, cores: List[Dict], gems: List[Gem], target_points: List[int] = None) -> Optional[Dict]:
+    def _allocate_for_target(self, core_state: Dict, available_gems: List[Gem], target: int) -> List[Gem]:
         """
-        목표 달성 중심 할당: 먼저 추가된 코어를 우선 완성
+        목표 질서 포인트에 도달하기 위한 최적의 젬 조합 찾기
         """
-        # 젬을 질서 포인트 순으로 정렬 (높은 질서 포인트부터)
-        sorted_gems = sorted(gems, key=lambda g: g.order_points, reverse=True)
-        available_gems = list(sorted_gems)
-        
-        # 각 코어별 할당 상태 초기화
-        core_states = {}
-        for core_info in cores:
-            core_states[core_info["index"]] = {
-                "core_info": core_info,
-                "assigned_gems": [],
-                "remaining_willpower": core_info["data"].willpower,
-                "total_order_points": 0
-            }
-        
-        # 모든 젬을 하나씩 할당
-        for gem in available_gems:
-            best_core_idx = None
-            lowest_core_idx = float('inf')
-            
-            # 각 코어의 목표 부족도 계산하여 먼저 추가된 코어 우선 찾기
-            for core_info in cores:
-                core_idx = core_info["index"]
-                core_state = core_states[core_idx]
-                
-                # 할당 가능한지 확인
-                if (core_state["remaining_willpower"] >= gem.willpower_cost and 
-                    len(core_state["assigned_gems"]) < 4):
-                    
-                    # 목표 부족도 계산
-                    if target_points and core_idx < len(target_points):
-                        target = target_points[core_idx]
-                        if target > 0:
-                            current_points = core_state["total_order_points"]
-                            shortage = target - current_points
-                            
-                            # 목표를 이미 달성한 코어는 제외
-                            if shortage <= 0:
-                                continue
-                            
-                            # 먼저 추가된 코어 우선 (부족도가 있으면서 인덱스가 가장 낮은 것)
-                            if core_idx < lowest_core_idx:
-                                lowest_core_idx = core_idx
-                                best_core_idx = core_idx
-                    
-            # 목표가 없는 코어들도 고려 (모든 목표 코어가 할당 불가능한 경우)
-            if best_core_idx is None:
-                for core_info in cores:
-                    core_idx = core_info["index"]
-                    core_state = core_states[core_idx]
-                    
-                    if (core_state["remaining_willpower"] >= gem.willpower_cost and 
-                        len(core_state["assigned_gems"]) < 4):
-                        best_core_idx = core_idx
-                        break
-            
-            # 선택된 코어에 젬 할당
-            if best_core_idx is not None:
-                core_state = core_states[best_core_idx]
-                core_state["assigned_gems"].append(gem)
-                core_state["remaining_willpower"] -= gem.willpower_cost
-                core_state["total_order_points"] += gem.order_points
-        
-        # 결과 구성
-        return self._build_result_from_states(list(core_states.values()))
-    
-    def _allocate_for_target(self, core_state: Dict, available_gems: List, target: int) -> List:
-        """
-        목표 달성을 위한 젬 할당
-        """
-        from itertools import combinations
-        
         best_combination = None
         best_distance = float('inf')
+        remaining_gems = list(available_gems)
         
-        # 목표에 가장 가까운 젬 조합 찾기
-        for size in range(1, min(5, len(available_gems) + 1)):
-            for combo in combinations(available_gems, size):
-                willpower_cost = sum(gem.willpower_cost for gem in combo)
-                order_points = sum(gem.order_points for gem in combo)
+        # 가능한 모든 젬 조합을 시도하여 목표에 가장 가까운 조합 찾기
+        from itertools import combinations
+        
+        for combo_size in range(1, min(5, len(available_gems) + 1)):  # 최대 4개까지
+            for gem_combo in combinations(available_gems, combo_size):
+                total_willpower = sum(gem.willpower_cost for gem in gem_combo)
+                total_order_points = sum(gem.order_points for gem in gem_combo)
                 
-                if willpower_cost <= core_state["remaining_willpower"]:
-                    distance = abs(order_points - target)
-                    if distance < best_distance:
-                        best_distance = distance
-                        best_combination = combo
-                        if distance == 0:  # 정확히 목표 달성
-                            break
-            if best_distance == 0:
+                # 의지력 초과 체크
+                if total_willpower > core_state["remaining_willpower"]:
+                    continue
+                
+                # 목표와의 거리 계산
+                distance = abs(total_order_points - target)
+                
+                # 목표에 정확히 도달하거나 더 가까운 조합 선택
+                if distance < best_distance or (distance == 0 and best_distance > 0):
+                    best_distance = distance
+                    best_combination = gem_combo
+                    
+                    # 정확히 목표에 도달했으면 즉시 선택
+                    if distance == 0:
+                        break
+            
+            if best_distance == 0:  # 정확히 목표에 도달했으면 더 이상 찾지 않음
                 break
         
-        # 젬 할당
-        remaining_gems = list(available_gems)
+        # 최적 조합을 코어에 할당
         if best_combination:
             for gem in best_combination:
                 core_state["assigned_gems"].append(gem)
@@ -357,18 +301,15 @@ class CoreOptimizer:
         
         return remaining_gems
     
-    def _build_result_from_states(self, core_states: List[Dict]) -> Dict:
+    def _build_result(self, core_states: List[Dict]) -> Dict:
         """
-        결과 구성
+        최종 결과 구성
         """
         core_results = []
         total_score = 0
         total_gems_used = 0
         
-        # 원본 순서로 정렬
-        core_states.sort(key=lambda x: x["core_info"]["index"])
-        
-        for core_state in core_states:
+        for i, core_state in enumerate(core_states):
             core_data = core_state["core_info"]["data"]
             assigned_gems = core_state["assigned_gems"]
             
@@ -388,7 +329,7 @@ class CoreOptimizer:
             
             core_results.append({
                 "core_type": core_state["core_info"]["type"],
-                "core_index": core_state["core_info"]["index"],
+                "core_index": core_state["original_index"],  # 원본 인덱스 사용
                 "gems": [str(gem) for gem in assigned_gems],
                 "gem_count": len(assigned_gems),
                 "total_willpower_used": total_willpower_used,
@@ -399,61 +340,49 @@ class CoreOptimizer:
                 "score": score
             })
         
+        # 원본 순서로 정렬
+        core_results.sort(key=lambda x: x["core_index"])
+        
         return {
             "cores": core_results,
             "total_score": total_score,
             "total_gems_used": total_gems_used,
-            "total_available_gems": len(core_results) * 4
+            "total_available_gems": len(gems)
         }
-        
-        best_allocation = None
-        best_total_score = -1
-        
-        # 효율적인 그리디 알고리즘 사용
-        best_allocation = self._greedy_allocation(cores, gems)
-        
-        return best_allocation
     
-    def _greedy_allocation(self, cores: List[Dict], gems: List[Gem], target_points: List[int] = None) -> Optional[Dict]:
-        """
-        그리디 알고리즘을 사용한 효율적인 잼 분배
-        각 잼을 가장 적합한 코어에 할당 (질서 포인트 우선)
-        """
-        # 젬을 질서 포인트 순으로 정렬 (높은 질서 포인트부터)
-        sorted_gems = sorted(gems, key=lambda g: g.order_points, reverse=True)
-        
-        # 각 코어별 할당 상태 초기화
-        core_states = []
-        for core_info in cores:
-            core_states.append({
-                "core_info": core_info,
-                "assigned_gems": [],
-                "remaining_willpower": core_info["data"].willpower,
-                "total_order_points": 0
-            })
-        
-        # 각 잼을 최적의 코어에 할당
-        for gem in sorted_gems:
-            best_core = None
-            best_score_improvement = 0
-            
-            # 각 코어에 대해 이 잼을 할당했을 때의 점수 향상 계산
-            for i, core_state in enumerate(core_states):
-                # 의지력이 부족하거나 이미 4개 잼이 있으면 스킵
-                if (core_state["remaining_willpower"] < gem.willpower_cost or 
-                    len(core_state["assigned_gems"]) >= 4):
-                    continue
-                
-                # 현재 활성화된 능력 수
-                current_abilities = len(core_state["core_info"]["data"].get_activated_abilities(
-                    core_state["total_order_points"]))
-                
-                # 이 잼을 추가했을 때 활성화될 능력 수
+    def _generate_allocations(self, num_gems: int, num_cores: int, max_gems_per_core: int = 4):
                 new_order_points = core_state["total_order_points"] + gem.order_points
                 new_abilities = len(core_state["core_info"]["data"].get_activated_abilities(new_order_points))
                 
                 # 점수 향상 계산 (새로 활성화되는 능력 수 + 질서포인트)
                 score_improvement = (new_abilities - current_abilities) * 1000 + gem.order_points
+                
+                # 목표 질서 포인트가 설정된 경우 목표 달성 우선순위 적용
+                if target_points and original_index < len(target_points):
+                    target = target_points[original_index]
+                    if target > 0:  # 목표가 설정된 경우에만
+                        current_distance = abs(core_state["total_order_points"] - target)
+                        new_distance = abs(new_order_points - target)
+                        
+                        # 목표에 정확히 도달하면 최고 우선순위
+                        if new_order_points == target:
+                            score_improvement += 10000
+                        # 목표에 가까워지면 큰 보너스
+                        elif new_distance < current_distance:
+                            score_improvement += 5000 - new_distance * 100
+                        # 목표에서 멀어지면 큰 페널티
+                        elif new_distance > current_distance:
+                            score_improvement -= 3000
+                        
+                        # 목표를 초과하는 경우 큰 페널티
+                        if new_order_points > target:
+                            excess = new_order_points - target
+                            score_improvement -= excess * 500
+                else:
+                    # 목표가 없는 코어는 우선순위만 적용
+                    priority = core_state["core_info"]["priority"]
+                    priority_bonus = (11 - priority) * 50  # 목표 있는 코어보다 낮은 보너스
+                    score_improvement += priority_bonus
                 
                 if score_improvement > best_score_improvement:
                     best_score_improvement = score_improvement
