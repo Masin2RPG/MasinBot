@@ -241,20 +241,104 @@ class CoreOptimizer:
         best_allocation = None
         best_total_score = -1
         
-        # 각 잼을 어느 코어에 할당할지 결정하는 모든 조합 시도
-        # 잼의 개수가 많으면 계산량이 많아지므로 제한
-        if num_gems > 12:  # 너무 많은 잼은 제한
-            gems = gems[:12]
-            num_gems = 12
-        
-        # 각 잼을 코어에 할당하는 모든 가능한 조합 시도
-        for allocation in self._generate_allocations(num_gems, num_cores):
-            result = self._evaluate_allocation(cores, gems, allocation)
-            if result and result["total_score"] > best_total_score:
-                best_total_score = result["total_score"]
-                best_allocation = result
+        # 효율적인 그리디 알고리즘 사용
+        best_allocation = self._greedy_allocation(cores, gems)
         
         return best_allocation
+    
+    def _greedy_allocation(self, cores: List[Dict], gems: List[Gem]) -> Optional[Dict]:
+        """
+        그리디 알고리즘을 사용한 효율적인 잼 분배
+        각 잼을 가장 효율적인 코어에 할당
+        """
+        # 잼을 효율성 순으로 정렬 (질서포인트/의지력 비율)
+        sorted_gems = sorted(gems, key=lambda g: g.order_points / max(g.willpower_cost, 1), reverse=True)
+        
+        # 각 코어별 할당 상태 초기화
+        core_states = []
+        for core_info in cores:
+            core_states.append({
+                "core_info": core_info,
+                "assigned_gems": [],
+                "remaining_willpower": core_info["data"].willpower,
+                "total_order_points": 0
+            })
+        
+        # 각 잼을 최적의 코어에 할당
+        for gem in sorted_gems:
+            best_core = None
+            best_score_improvement = 0
+            
+            # 각 코어에 대해 이 잼을 할당했을 때의 점수 향상 계산
+            for i, core_state in enumerate(core_states):
+                # 의지력이 부족하거나 이미 4개 잼이 있으면 스킵
+                if (core_state["remaining_willpower"] < gem.willpower_cost or 
+                    len(core_state["assigned_gems"]) >= 4):
+                    continue
+                
+                # 현재 활성화된 능력 수
+                current_abilities = len(core_state["core_info"]["data"].get_activated_abilities(
+                    core_state["total_order_points"]))
+                
+                # 이 잼을 추가했을 때 활성화될 능력 수
+                new_order_points = core_state["total_order_points"] + gem.order_points
+                new_abilities = len(core_state["core_info"]["data"].get_activated_abilities(new_order_points))
+                
+                # 점수 향상 계산 (새로 활성화되는 능력 수 + 질서포인트)
+                score_improvement = (new_abilities - current_abilities) * 1000 + gem.order_points
+                
+                if score_improvement > best_score_improvement:
+                    best_score_improvement = score_improvement
+                    best_core = i
+            
+            # 가장 좋은 코어에 잼 할당
+            if best_core is not None:
+                core_states[best_core]["assigned_gems"].append(gem)
+                core_states[best_core]["remaining_willpower"] -= gem.willpower_cost
+                core_states[best_core]["total_order_points"] += gem.order_points
+        
+        # 결과 구성
+        core_results = []
+        total_score = 0
+        total_gems_used = 0
+        
+        for i, core_state in enumerate(core_states):
+            core_data = core_state["core_info"]["data"]
+            assigned_gems = core_state["assigned_gems"]
+            
+            if assigned_gems:
+                total_willpower_used = sum(gem.willpower_cost for gem in assigned_gems)
+                total_order_points = sum(gem.order_points for gem in assigned_gems)
+                activated_abilities = core_data.get_activated_abilities(total_order_points)
+                score = len(activated_abilities) * 1000 + total_order_points
+                total_gems_used += len(assigned_gems)
+            else:
+                total_willpower_used = 0
+                total_order_points = 0
+                activated_abilities = []
+                score = 0
+            
+            total_score += score
+            
+            core_results.append({
+                "core_type": core_state["core_info"]["type"],
+                "core_index": i,
+                "gems": [str(gem) for gem in assigned_gems],
+                "gem_count": len(assigned_gems),
+                "total_willpower_used": total_willpower_used,
+                "remaining_willpower": core_data.willpower - total_willpower_used,
+                "total_order_points": total_order_points,
+                "activated_abilities": activated_abilities,
+                "all_abilities": core_data.ability_points,
+                "score": score
+            })
+        
+        return {
+            "cores": core_results,
+            "total_score": total_score,
+            "total_gems_used": total_gems_used,
+            "total_available_gems": len(gems)
+        }
     
     def _generate_allocations(self, num_gems: int, num_cores: int, max_gems_per_core: int = 4):
         """
