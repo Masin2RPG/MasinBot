@@ -10,6 +10,7 @@ from discord.ext import commands
 
 # 로컬 모듈 임포트
 from config import Config
+from core_optimizer import CoreOptimizer
 from decoder import SaveCodeDecoder
 from item_searcher import ItemSearcher
 from savecode_decoder import decode_savecode2
@@ -28,6 +29,7 @@ class SaveCodeBot:
         self.config = Config()
         self.decoder = SaveCodeDecoder()
         self.item_searcher = ItemSearcher()  # 아이템 검색기 초기화
+        self.core_optimizer = CoreOptimizer()  # 코어 최적화기 초기화
         
         # 봇 인텐트 설정
         intents = discord.Intents.default()
@@ -208,6 +210,94 @@ class SaveCodeBot:
                 logger.error(f"통계 조회 중 오류: {e}")
                 await ctx.send(f"❌ 통계 조회 중 오류 발생: {e}")
         
+        @self.bot.command(name='코어', help='코어에 잼을 조합하여 최적의 조합을 찾습니다')
+        async def core_command(ctx: commands.Context, core_type: str, *gems):
+            """코어 최적화 명령어"""
+            if not core_type:
+                await ctx.send("❌ 코어 타입을 입력해주세요. (전설, 유물, 고대)")
+                return
+            
+            if not gems:
+                await ctx.send("❌ 잼 정보를 입력해주세요. (예: 25 35 45)")
+                return
+            
+            try:
+                # 코어 타입 검증
+                valid_cores = ["전설", "유물", "고대"]
+                if core_type not in valid_cores:
+                    await ctx.send(f"❌ 올바른 코어 타입을 입력해주세요: {', '.join(valid_cores)}")
+                    return
+                
+                # 최적화 실행
+                result = self.core_optimizer.find_optimal_combination(core_type, list(gems))
+                
+                if "error" in result:
+                    await ctx.send(f"❌ {result['error']}")
+                    return
+                
+                # 결과 임베드 생성
+                embed = discord.Embed(
+                    title="⚡ 코어 최적화 결과",
+                    color=0xff6b35
+                )
+                
+                embed.add_field(
+                    name="🔮 코어 정보",
+                    value=f"**타입:** {result['core_type']}\n**의지력:** {result['core_willpower']}",
+                    inline=True
+                )
+                
+                embed.add_field(
+                    name="💎 선택된 잼",
+                    value=f"```{', '.join(result['gems'])}```\n**개수:** {result['gem_count']}개",
+                    inline=True
+                )
+                
+                embed.add_field(
+                    name="📊 사용량",
+                    value=f"**사용된 의지력:** {result['total_willpower_used']}\n**남은 의지력:** {result['remaining_willpower']}",
+                    inline=True
+                )
+                
+                embed.add_field(
+                    name="✨ 질서포인트",
+                    value=f"```총 {result['total_order_points']}포인트```",
+                    inline=False
+                )
+                
+                # 활성화된 능력들
+                if result['activated_abilities']:
+                    activated_str = ", ".join(map(str, result['activated_abilities']))
+                    embed.add_field(
+                        name="🎯 활성화된 능력",
+                        value=f"```{activated_str}```",
+                        inline=True
+                    )
+                
+                # 모든 능력들
+                all_abilities_str = ", ".join(map(str, result['all_abilities']))
+                embed.add_field(
+                    name="📋 모든 능력",
+                    value=f"```{all_abilities_str}```",
+                    inline=True
+                )
+                
+                # 효율성 표시
+                efficiency = len(result['activated_abilities']) / len(result['all_abilities']) * 100
+                embed.add_field(
+                    name="📈 효율성",
+                    value=f"```{efficiency:.1f}% ({len(result['activated_abilities'])}/{len(result['all_abilities'])})```",
+                    inline=True
+                )
+                
+                embed.set_footer(text="💡 팁: 다른 잼 조합도 시도해보세요!")
+                
+                await ctx.send(embed=embed)
+                
+            except Exception as e:
+                logger.error(f"코어 최적화 중 오류: {e}")
+                await ctx.send(f"❌ 코어 최적화 중 오류 발생: {e}")
+        
         @self.bot.command(name='도움말', help='사용 가능한 명령어를 보여줍니다')
         async def help_command(ctx: commands.Context):
             """도움말 명령어"""
@@ -244,6 +334,12 @@ class SaveCodeBot:
             embed.add_field(
                 name="/통계",
                 value="아이템 데이터베이스의 통계 정보를 표시합니다.",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/코어 <타입> <잼1> <잼2> ...",
+                value="코어에 잼을 조합하여 최적의 조합을 찾습니다.\n예: `/코어 전설 25 35 45`\n\n**잼 형식 설명:**\n`25` = 의지력 2, 질서포인트 5\n(앞자리: 의지력 소모, 뒷자리: 질서포인트 제공)",
                 inline=False
             )
             
