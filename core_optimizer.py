@@ -185,3 +185,164 @@ class CoreOptimizer:
         # 점수순으로 정렬
         results.sort(key=lambda x: x["score"], reverse=True)
         return results
+    
+    def optimize_multiple_cores(self, core_types: List[str], gem_strings: List[str]) -> Dict:
+        """
+        여러 코어에 잼을 최적으로 분배하는 함수
+        
+        Args:
+            core_types: 코어 타입들의 리스트 (예: ["전설", "유물", "유물"])
+            gem_strings: 잼 문자열들의 리스트
+            
+        Returns:
+            최적화 결과 딕셔너리
+        """
+        # 입력 검증
+        if not core_types:
+            return {"error": "코어 타입이 지정되지 않았습니다"}
+        
+        if not gem_strings:
+            return {"error": "잼이 지정되지 않았습니다"}
+        
+        # 코어 데이터 생성
+        cores = []
+        for i, core_type in enumerate(core_types):
+            core_data = self.get_core_data(core_type)
+            if not core_data:
+                return {"error": f"알 수 없는 코어 타입: {core_type}"}
+            cores.append({"index": i, "type": core_type, "data": core_data})
+        
+        # 잼 파싱
+        gems = self.parse_gems(gem_strings)
+        if not gems:
+            return {"error": "유효한 잼이 없습니다"}
+        
+        # 가능한 모든 잼 분배 조합 시도
+        best_allocation = None
+        best_total_score = -1
+        
+        # 각 코어에 최대 4개씩 분배하는 모든 조합 시도
+        best_result = self._find_best_allocation(cores, gems)
+        
+        if not best_result:
+            return {"error": "유효한 잼 분배를 찾을 수 없습니다"}
+        
+        return best_result
+    
+    def _find_best_allocation(self, cores: List[Dict], gems: List[Gem]) -> Optional[Dict]:
+        """
+        최적의 잼 분배를 찾는 내부 함수
+        """
+        from itertools import combinations_with_replacement
+        
+        num_cores = len(cores)
+        num_gems = len(gems)
+        
+        best_allocation = None
+        best_total_score = -1
+        
+        # 각 잼을 어느 코어에 할당할지 결정하는 모든 조합 시도
+        # 잼의 개수가 많으면 계산량이 많아지므로 제한
+        if num_gems > 12:  # 너무 많은 잼은 제한
+            gems = gems[:12]
+            num_gems = 12
+        
+        # 각 잼을 코어에 할당하는 모든 가능한 조합 시도
+        for allocation in self._generate_allocations(num_gems, num_cores):
+            result = self._evaluate_allocation(cores, gems, allocation)
+            if result and result["total_score"] > best_total_score:
+                best_total_score = result["total_score"]
+                best_allocation = result
+        
+        return best_allocation
+    
+    def _generate_allocations(self, num_gems: int, num_cores: int, max_gems_per_core: int = 4):
+        """
+        각 잼을 코어에 할당하는 모든 가능한 조합 생성
+        각 코어당 최대 4개까지만 할당
+        """
+        from itertools import product
+
+        # 각 잼이 들어갈 수 있는 코어 옵션 (0~num_cores-1, 또는 -1은 사용하지 않음)
+        core_options = list(range(num_cores)) + [-1]  # -1은 해당 잼을 사용하지 않음
+        
+        # 모든 가능한 할당 조합
+        for allocation in product(core_options, repeat=num_gems):
+            # 각 코어당 4개 제한 검사
+            core_counts = [0] * num_cores
+            for core_idx in allocation:
+                if core_idx >= 0:
+                    core_counts[core_idx] += 1
+            
+            # 4개 제한 체크
+            if all(count <= max_gems_per_core for count in core_counts):
+                yield allocation
+    
+    def _evaluate_allocation(self, cores: List[Dict], gems: List[Gem], allocation: tuple) -> Optional[Dict]:
+        """
+        특정 잼 할당에 대한 결과 평가
+        """
+        core_results = []
+        total_score = 0
+        total_gems_used = 0
+        
+        # 각 코어별로 할당된 잼들 정리
+        for core_info in cores:
+            core_idx = core_info["index"]
+            core_data = core_info["data"]
+            
+            # 이 코어에 할당된 잼들 찾기
+            assigned_gems = []
+            for gem_idx, assigned_core in enumerate(allocation):
+                if assigned_core == core_idx:
+                    assigned_gems.append(gems[gem_idx])
+            
+            # 이 코어에 잼이 할당되지 않았으면 스킵
+            if not assigned_gems:
+                core_results.append({
+                    "core_type": core_info["type"],
+                    "core_index": core_idx,
+                    "gems": [],
+                    "gem_count": 0,
+                    "total_willpower_used": 0,
+                    "remaining_willpower": core_data.willpower,
+                    "total_order_points": 0,
+                    "activated_abilities": [],
+                    "all_abilities": core_data.ability_points,
+                    "score": 0
+                })
+                continue
+            
+            # 의지력 체크
+            total_willpower_used = sum(gem.willpower_cost for gem in assigned_gems)
+            if total_willpower_used > core_data.willpower:
+                return None  # 의지력 초과시 무효한 할당
+            
+            # 질서포인트 및 능력 계산
+            total_order_points = sum(gem.order_points for gem in assigned_gems)
+            activated_abilities = core_data.get_activated_abilities(total_order_points)
+            
+            # 점수 계산 (활성화된 능력 개수 우선, 그 다음 질서포인트)
+            score = len(activated_abilities) * 1000 + total_order_points
+            total_score += score
+            total_gems_used += len(assigned_gems)
+            
+            core_results.append({
+                "core_type": core_info["type"],
+                "core_index": core_idx,
+                "gems": [str(gem) for gem in assigned_gems],
+                "gem_count": len(assigned_gems),
+                "total_willpower_used": total_willpower_used,
+                "remaining_willpower": core_data.willpower - total_willpower_used,
+                "total_order_points": total_order_points,
+                "activated_abilities": activated_abilities,
+                "all_abilities": core_data.ability_points,
+                "score": score
+            })
+        
+        return {
+            "cores": core_results,
+            "total_score": total_score,
+            "total_gems_used": total_gems_used,
+            "total_available_gems": len(gems)
+        }

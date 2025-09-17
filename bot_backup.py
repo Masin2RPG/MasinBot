@@ -210,7 +210,7 @@ class SaveCodeBot:
                 logger.error(f"통계 조회 중 오류: {e}")
                 await ctx.send(f"❌ 통계 조회 중 오류 발생: {e}")
         
-        @self.bot.command(name='코어', help='코어에 잼을 조합하여 최적의 조합을 찾습니다')
+                @self.bot.command(name='코어', help='코어에 잼을 조합하여 최적의 조합을 찾습니다')
         async def core_command(ctx: commands.Context, *args):
             """코어 최적화 명령어 (단일 코어 또는 멀티 코어 지원)"""
             if not args:
@@ -358,6 +358,109 @@ class SaveCodeBot:
                 await ctx.send(f"❌ 코어 최적화 중 오류 발생: {e}")
         
         @self.bot.command(name='도움말', help='사용 가능한 명령어를 보여줍니다')
+        
+        async def _send_single_core_result(self, ctx, result):
+            """단일 코어 결과 전송"""
+            embed = discord.Embed(
+                title="⚡ 코어 최적화 결과",
+                color=0xff6b35
+            )
+                title="⚡ 코어 최적화 결과",
+                color=0xff6b35
+            )
+            
+            embed.add_field(
+                name="🔮 코어 정보",
+                value=f"**타입:** {result['core_type']}\n**의지력:** {result['core_willpower']}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="💎 선택된 잼",
+                value=f"```{', '.join(result['gems'])}```\n**개수:** {result['gem_count']}개",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📊 사용량",
+                value=f"**사용된 의지력:** {result['total_willpower_used']}\n**남은 의지력:** {result['remaining_willpower']}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="✨ 질서포인트",
+                value=f"```총 {result['total_order_points']}포인트```",
+                inline=False
+            )
+            
+            # 활성화된 능력들
+            if result['activated_abilities']:
+                activated_str = ", ".join(map(str, result['activated_abilities']))
+                embed.add_field(
+                    name="🎯 활성화된 능력",
+                    value=f"```{activated_str}```",
+                    inline=True
+                )
+            
+            # 모든 능력들
+            all_abilities_str = ", ".join(map(str, result['all_abilities']))
+            embed.add_field(
+                name="📋 모든 능력",
+                value=f"```{all_abilities_str}```",
+                inline=True
+            )
+            
+            # 효율성 표시
+            efficiency = len(result['activated_abilities']) / len(result['all_abilities']) * 100
+            embed.add_field(
+                name="📈 효율성",
+                value=f"```{efficiency:.1f}% ({len(result['activated_abilities'])}/{len(result['all_abilities'])})```",
+                inline=True
+            )
+            
+            embed.set_footer(text="💡 팁: 다른 잼 조합도 시도해보세요!")
+            
+            await ctx.send(embed=embed)
+        
+        async def _send_multi_core_result(self, ctx, result, core_types):
+            """멀티 코어 결과 전송"""
+            embed = discord.Embed(
+                title="⚡ 멀티 코어 최적화 결과",
+                color=0x9b59b6
+            )
+            
+            # 전체 요약
+            total_gems_used = result['total_gems_used']
+            total_available = result['total_available_gems']
+            embed.add_field(
+                name="📊 전체 요약",
+                value=f"**코어 개수:** {len(core_types)}개\n**사용된 잼:** {total_gems_used}/{total_available}개",
+                inline=False
+            )
+            
+            # 각 코어별 결과
+            for i, core_result in enumerate(result['cores']):
+                if core_result['gem_count'] > 0:
+                    gems_str = ", ".join(core_result['gems'])
+                    activated_str = ", ".join(map(str, core_result['activated_abilities'])) if core_result['activated_abilities'] else "없음"
+                    
+                    embed.add_field(
+                        name=f"🔮 {core_result['core_type']} #{i+1}",
+                        value=f"**잼:** `{gems_str}`\n**질서포인트:** {core_result['total_order_points']}\n**활성화:** {activated_str}",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name=f"🔮 {core_result['core_type']} #{i+1}",
+                        value="**잼:** 없음\n**질서포인트:** 0\n**활성화:** 없음",
+                        inline=True
+                    )
+            
+            embed.set_footer(text="💡 팁: 멀티 코어로 더 많은 능력을 활성화하세요!")
+            
+            await ctx.send(embed=embed)
+        
+        @self.bot.command(name='도움말', help='사용 가능한 명령어를 보여줍니다')
         async def help_command(ctx: commands.Context):
             """도움말 명령어"""
             embed = discord.Embed(
@@ -398,7 +501,7 @@ class SaveCodeBot:
             
             embed.add_field(
                 name="/코어 <타입> <잼1> <잼2> ...",
-                value="코어에 잼을 조합하여 최적의 조합을 찾습니다.\n**단일:** `/코어 전설 25 35 45`\n**멀티:** `/코어 전설 유물 유물 33 55 44`\n\n**잼 형식 설명:**\n`25` = 의지력 2, 질서포인트 5\n(앞자리: 의지력 소모, 뒷자리: 질서포인트 제공)",
+                value="코어에 잼을 조합하여 최적의 조합을 찾습니다.\n예: `/코어 전설 25 35 45`\n\n**잼 형식 설명:**\n`25` = 의지력 2, 질서포인트 5\n(앞자리: 의지력 소모, 뒷자리: 질서포인트 제공)",
                 inline=False
             )
             
