@@ -14,7 +14,7 @@ from config import Config
 from core_optimizer import CoreOptimizer
 from decoder import SaveCodeDecoder
 from item_searcher import ItemSearcher
-from savecode_decoder import decode_savecode2
+from savecode_decoder import decode_savecode2, extract_save_data
 
 # 로깅 설정
 logging.basicConfig(
@@ -23,6 +23,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 캐릭터 리스트 로드 함수
+def load_character_list():
+    """CharList_by_id.json 파일에서 캐릭터 목록을 로드"""
+    try:
+        with open('CharList_by_id.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("CharList_by_id.json 파일을 찾을 수 없습니다. 기본 영웅 타입을 사용합니다.")
+        return {}
+    except json.JSONDecodeError:
+        logger.error("CharList_by_id.json 파일 형식이 올바르지 않습니다.")
+        return {}
+
+# 전역 캐릭터 목록 로드
+CHARACTER_LIST = load_character_list()
 
 
 class CoreSetupModal(ui.Modal, title='🔮 코어 설정'):
@@ -967,20 +982,160 @@ class SaveCodeBot:
             try:
                 raw_codes = re.split(r'[;\n,]+|\s{1,}', code.strip()) 
                 codes = [c.strip().upper() for c in raw_codes if c.strip()]
+                
+                # 통계 변수 초기화
+                valid_count = 0
+                invalid_count = 0
+                characters = set()  # 중복 캐릭터 제거를 위한 set
+                character_counts = {}  # 캐릭터별 출현 횟수 추적
+                
                 for code in codes:
                     print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
                 # 검증
                     is_valid = decode_savecode2(code, name)
                     result = "✅ 유효함" if is_valid else "❌ 유효하지 않음"
                     
+                    # 통계 업데이트
+                    if is_valid:
+                        valid_count += 1
+                    else:
+                        invalid_count += 1
+                    
+                    # 세이브 데이터 추출
+                    save_data = extract_save_data(code, name)
+                    
+                    # 영웅 타입 이름 매핑 (JSON 파일 기반)
+                    hero_type_index = save_data['hero_type_index']
+                    hero_name = CHARACTER_LIST.get(str(hero_type_index), f"알 수 없는 캐릭터 (ID: {hero_type_index})")
+                    
+                    # 캐릭터 세트에 추가 (중복 제거)
+                    characters.add(hero_name)
+                    
+                    # 캐릭터별 출현 횟수 카운트
+                    character_counts[hero_name] = character_counts.get(hero_name, 0) + 1
+                    
                     # 아이템 추출
                     items_list = self.decoder.extract_items(code)
                     response = "\n".join(items_list)
                     
-                    # 결과 전송
-                    await ctx.send(f"**검증 결과:** {result}")
+                    # 결과 전송 - Embed 사용
+                    embed = discord.Embed(
+                        title="🎮 세이브코드 분석 결과",
+                        color=0x00ff00 if is_valid else 0xff0000
+                    )
+                    embed.add_field(name="검증 상태", value=result, inline=True)
+                    embed.add_field(name="플레이어", value=name, inline=True)
+                    embed.add_field(name="영웅", value=hero_name, inline=True)
+                    embed.add_field(name="💰 골드", value=f"{save_data['gold']:,}", inline=True)
+                    embed.add_field(name="🌲 나무", value=f"{save_data['lumber']:,}", inline=True)
+                    embed.add_field(name="📈 레벨", value=save_data['level'], inline=True)
+                    
+                    await ctx.send(embed=embed)
+                    
+                    # 아이템 목록을 모던한 Embed로 표시
                     if items_list:
-                        await ctx.send(f"**세이브코드 아이템 추출 결과:**\n```\n{response}\n```")
+                        items_embed = discord.Embed(
+                            title="🎒 세이브코드 아이템 목록",
+                            description="추출된 아이템들입니다",
+                            color=0x3498db
+                        )
+                        
+                        # 아이템들을 6개씩 나누어서 표시 (인벤토리 슬롯처럼)
+                        items_per_row = 3
+                        for i in range(0, len(items_list), items_per_row):
+                            batch = items_list[i:i+items_per_row]
+                            slot_numbers = [f"슬롯 {j+1+i}" for j in range(len(batch))]
+                            
+                            field_name = f"📦 아이템 슬롯 {i+1}-{min(i+items_per_row, len(items_list))}"
+                            field_value = ""
+                            
+                            for j, item in enumerate(batch):
+                                slot_num = i + j + 1
+                                # 아이템 이름에 따른 이모지 추가
+                                emoji = "⚔️" if "무기" in item or "검" in item or "창" in item else \
+                                       "🛡️" if "방패" in item or "갑옷" in item or "투구" in item else \
+                                       "💍" if "반지" in item or "목걸이" in item else \
+                                       "🧪" if "포션" in item or "물약" in item else \
+                                       "💎" if "젬" in item or "보석" in item else \
+                                       "📜" if "스크롤" in item or "두루마리" in item else \
+                                       "🔮" if "오브" in item or "수정" in item else \
+                                       "⚡" if "룬" in item else \
+                                       "🎯"
+                                
+                                field_value += f"{emoji} **{slot_num}.** {item}\n"
+                            
+                            items_embed.add_field(
+                                name=field_name,
+                                value=field_value or "빈 슬롯",
+                                inline=True
+                            )
+                        
+                        # 총 아이템 개수 표시
+                        items_embed.set_footer(text=f"총 {len(items_list)}개의 아이템이 발견되었습니다")
+                        
+                        await ctx.send(embed=items_embed)
+                
+                # 여러 세이브코드가 있는 경우 통계 표시
+                if len(codes) > 1:
+                    stats_embed = discord.Embed(
+                        title="📊 세이브코드 처리 통계",
+                        description="처리된 모든 세이브코드의 통계입니다",
+                        color=0x9b59b6
+                    )
+                    
+                    stats_embed.add_field(
+                        name="✅ 유효한 검증", 
+                        value=f"{valid_count}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
+                        name="❌ 유효하지 않은 검증", 
+                        value=f"{invalid_count}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
+                        name="👥 캐릭터 수", 
+                        value=f"{len(characters)}건", 
+                        inline=True
+                    )
+                    
+                    # 발견된 캐릭터 목록 추가
+                    if characters:
+                        character_list = ", ".join(sorted(characters))
+                        if len(character_list) > 1024:  # Discord 필드 제한
+                            character_list = character_list[:1021] + "..."
+                        stats_embed.add_field(
+                            name="🎭 발견된 캐릭터",
+                            value=character_list,
+                            inline=False
+                        )
+                    
+                    # 중복된 캐릭터 목록 추가
+                    duplicated_characters = {name: count for name, count in character_counts.items() if count > 1}
+                    if duplicated_characters:
+                        duplicate_list = []
+                        for char_name, count in sorted(duplicated_characters.items()):
+                            duplicate_list.append(f"{char_name} (×{count})")
+                        
+                        duplicate_text = ", ".join(duplicate_list)
+                        if len(duplicate_text) > 1024:  # Discord 필드 제한
+                            duplicate_text = duplicate_text[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="🔄 중복된 캐릭터",
+                            value=duplicate_text,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="🔄 중복된 캐릭터",
+                            value="중복된 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    stats_embed.set_footer(text=f"총 {len(codes)}개의 세이브코드를 처리했습니다")
+                    
+                    await ctx.send(embed=stats_embed)
                 
             except Exception as e:
                 logger.error(f"로드 처리 중 오류: {e}")
