@@ -3597,7 +3597,7 @@ class SaveCodeBot:
                         
                         embed.add_field(
                             name="✅ 찾은 캐릭터",
-                            value=f"**이름**: {char_name}\n**ID**: {char_id}",
+                            value=f"```yaml\n캐릭터: {char_name}\nID: {char_id}\n```",
                             inline=False
                         )
                         
@@ -3616,8 +3616,8 @@ class SaveCodeBot:
                         )
                         
                         result_text = ""
-                        for char_id, char_name in characters:
-                            result_text += f"**{char_name}** (ID: {char_id})\n"
+                        for i, (char_id, char_name) in enumerate(characters, 1):
+                            result_text += f"**{i}.** `{char_name}` **[ID: {char_id}]**\n"
                         
                         embed.add_field(
                             name="📋 검색 결과",
@@ -3641,8 +3641,8 @@ class SaveCodeBot:
                         
                         # 처음 10개만 표시
                         result_text = ""
-                        for char_id, char_name in characters[:10]:
-                            result_text += f"**{char_name}** (ID: {char_id})\n"
+                        for i, (char_id, char_name) in enumerate(characters[:10], 1):
+                            result_text += f"**{i}.** `{char_name}` **[ID: {char_id}]**\n"
                         
                         embed.add_field(
                             name="📋 검색 결과 (처음 10개)",

@@ -13,20 +13,24 @@ logger = logging.getLogger(__name__)
 class CharacterSearcher:
     """캐릭터 검색 클래스"""
     
-    def __init__(self, char_list_file: str = "CharList_by_id.json"):
+    def __init__(self, char_list_file: str = "CharList_by_id.json", char_name_file: str = "charName.json"):
         """
         초기화
         
         Args:
             char_list_file: 캐릭터 리스트가 포함된 JSON 파일 경로
+            char_name_file: 마신 이름과 캐릭터 이름 매핑이 포함된 JSON 파일 경로
         """
         self.char_list_file = char_list_file
+        self.char_name_file = char_name_file
         self.char_data: Dict[str, str] = {}
         self.name_to_id: Dict[str, str] = {}
+        self.masin_to_id: Dict[str, str] = {}  # 마신 이름으로 ID 찾기용
         self._load_character_data()
     
     def _load_character_data(self):
         """캐릭터 데이터를 파일에서 로드"""
+        # CharList_by_id.json 로드
         try:
             with open(self.char_list_file, 'r', encoding='utf-8') as f:
                 self.char_data = json.load(f)
@@ -48,6 +52,34 @@ class CharacterSearcher:
             logger.error(f"캐릭터 데이터 로드 중 오류: {e}")
             self.char_data = {}
             self.name_to_id = {}
+        
+        # charName.json 로드 (마신 이름 매핑)
+        try:
+            with open(self.char_name_file, 'r', encoding='utf-8') as f:
+                char_name_data = json.load(f)
+            
+            # 마신 이름으로 캐릭터 찾기 위한 매핑 생성
+            for entry in char_name_data:
+                masin_name = entry.get("마신", "")
+                character_names = entry.get("이름", [])
+                
+                # 각 캐릭터 이름에 대해 ID 찾기
+                for char_name in character_names:
+                    if char_name in self.name_to_id:
+                        char_id = self.name_to_id[char_name]
+                        self.masin_to_id[masin_name] = char_id
+                        # 마신 이름도 검색 가능하도록 name_to_id에 추가
+                        self.name_to_id[masin_name] = char_id
+                        break  # 첫 번째 매칭되는 캐릭터의 ID 사용
+            
+            logger.info(f"마신 이름 매핑 로드 완료: {len(self.masin_to_id)}개")
+            
+        except FileNotFoundError:
+            logger.warning(f"마신 이름 파일을 찾을 수 없습니다: {self.char_name_file}")
+        except json.JSONDecodeError as e:
+            logger.error(f"마신 이름 파일 파싱 오류: {e}")
+        except Exception as e:
+            logger.error(f"마신 이름 데이터 로드 중 오류: {e}")
     
     def search_by_exact_name(self, name: str) -> Optional[Tuple[str, str]]:
         """
@@ -66,24 +98,29 @@ class CharacterSearcher:
     
     def search_by_partial_name(self, partial_name: str, max_results: int = 10) -> List[Tuple[str, str]]:
         """
-        부분 이름으로 캐릭터 검색
+        부분 이름으로 캐릭터 검색 (마신 이름과 캐릭터 이름 모두 포함)
         
         Args:
             partial_name: 검색할 부분 이름
             max_results: 최대 결과 개수
             
         Returns:
-            [(캐릭터 ID, 캐릭터 이름)] 리스트
+            [(캐릭터 ID, 검색된 이름)] 리스트
         """
         if not partial_name.strip():
             return []
         
         results = []
         partial_name_lower = partial_name.lower()
+        seen_ids = set()  # 중복 방지용
         
-        for char_id, char_name in self.char_data.items():
-            if partial_name_lower in char_name.lower():
-                results.append((char_id, char_name))
+        # name_to_id에서 검색 (마신 이름과 캐릭터 이름 모두 포함)
+        for name, char_id in self.name_to_id.items():
+            if partial_name_lower in name.lower() and char_id not in seen_ids:
+                # 실제 캐릭터 이름을 가져오기
+                actual_char_name = self.char_data.get(char_id, name)
+                results.append((char_id, actual_char_name))
+                seen_ids.add(char_id)
                 
                 if len(results) >= max_results:
                     break
