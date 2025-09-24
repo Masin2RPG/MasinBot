@@ -35,6 +35,20 @@ class RaidSettings:
 
 
 @dataclass
+class PermissionSettings:
+    """권한 관련 설정"""
+    savecode_admin_only: bool = True  # 세이브생성 명령어 관리자 전용 여부
+    savecode_allowed_roles: list = None  # 세이브생성 허용 역할 이름들
+    savecode_allowed_users: list = None  # 세이브생성 허용 사용자 ID들
+    
+    def __post_init__(self):
+        if self.savecode_allowed_roles is None:
+            self.savecode_allowed_roles = []  # 기본값: 빈 리스트
+        if self.savecode_allowed_users is None:
+            self.savecode_allowed_users = []  # 기본값: 빈 리스트
+
+
+@dataclass
 class GameSettings:
     """게임 관련 설정"""
     version: int = 7
@@ -69,6 +83,7 @@ class ConfigManager:
     def __init__(self):
         self.bot = self._load_bot_settings()
         self.raid = self._load_raid_settings()
+        self.permissions = self._load_permission_settings()
         self.game = self._load_game_settings()
         self.optimization = self._load_optimization_settings()
         self._setup_logging()
@@ -92,6 +107,22 @@ class ConfigManager:
             channel_id=int(os.getenv('RAID_CHANNEL_ID', '0')),
             max_participants=int(os.getenv('RAID_MAX_PARTICIPANTS', '30')),
             timeout_minutes=int(os.getenv('RAID_TIMEOUT_MINUTES', '30'))
+        )
+    
+    def _load_permission_settings(self) -> PermissionSettings:
+        """권한 설정 로드"""
+        # 환경변수에서 허용된 역할들을 쉼표로 구분된 문자열로 받기
+        allowed_roles_str = os.getenv('SAVECODE_ALLOWED_ROLES', '')
+        allowed_roles = [role.strip() for role in allowed_roles_str.split(',') if role.strip()] if allowed_roles_str else []
+        
+        # 환경변수에서 허용된 사용자 ID들을 쉼표로 구분된 문자열로 받기
+        allowed_users_str = os.getenv('SAVECODE_ALLOWED_USERS', '')
+        allowed_users = [int(user_id.strip()) for user_id in allowed_users_str.split(',') if user_id.strip().isdigit()] if allowed_users_str else []
+        
+        return PermissionSettings(
+            savecode_admin_only=os.getenv('SAVECODE_ADMIN_ONLY', 'True').lower() == 'true',
+            savecode_allowed_roles=allowed_roles,
+            savecode_allowed_users=allowed_users
         )
     
     def _load_game_settings(self) -> GameSettings:
@@ -158,6 +189,11 @@ class Config:
         self.STRING_SOURCE = self._manager.game.string_source
         self.LOG_LEVEL = self._manager.bot.log_level
         self.LOG_FORMAT = self._manager.bot.log_format
+        
+        # 권한 설정 속성들
+        self.SAVECODE_ADMIN_ONLY = self._manager.permissions.savecode_admin_only
+        self.SAVECODE_ALLOWED_ROLES = self._manager.permissions.savecode_allowed_roles
+        self.SAVECODE_ALLOWED_USERS = self._manager.permissions.savecode_allowed_users
     
     def validate(self):
         """설정 유효성 검사"""

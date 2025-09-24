@@ -298,6 +298,13 @@ class ItemDatabase:
         """아이템 ID로 아이템 이름 조회"""
         return self._items.get(item_id, f"알 수 없는 아이템({item_id})")
     
+    def get_item_code_by_name(self, item_name: str) -> int:
+        """아이템 이름으로 아이템 코드(ID) 조회"""
+        for item_id, name in self._items.items():
+            if name == item_name:
+                return item_id
+        return None
+    
     def get_all_items(self) -> Dict[int, str]:
         """모든 아이템 정보 반환"""
         return self._items.copy()

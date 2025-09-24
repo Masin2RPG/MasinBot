@@ -13,6 +13,7 @@ from discord.ext import commands
 from config import Config
 from core_optimizer import CoreOptimizer
 from decoder import SaveCodeDecoder
+from encoder import SaveCodeEncoder
 from item_searcher import ItemSearcher
 from optimization_manager import OptimizationManager, OptimizationView
 from raid_system import RaidWaitingSystem
@@ -2116,12 +2117,418 @@ class RaidControlView(ui.View):
             await interaction.response.send_message(f"❌ 레이드 대기방 조회 중 오류 발생: {e}", ephemeral=True)
 
 
+# 사용하지 않는 세이브코드 생성 관련 클래스들 (주석 처리)
+# class SaveCodeCreationModal(ui.Modal, title='🎒 아이템 기반 세이브코드 생성'):
+#     """아이템 기반 세이브코드 생성 모달"""
+#     
+#     def __init__(self, encoder, player_name):
+#         super().__init__()
+#         self.encoder = encoder
+#         self.player_name = player_name
+#     
+#     item1 = ui.TextInput(
+#         label='1번째 아이템',
+#         placeholder='예: 예언의 손길',
+#         style=discord.TextStyle.short,
+#         max_length=50,
+#         required=False
+#     )
+#     
+#     item2 = ui.TextInput(
+#         label='2번째 아이템',
+#         placeholder='예: 사무엘의 영혼',
+#         style=discord.TextStyle.short,
+#         max_length=50,
+#         required=False
+#     )
+#     
+#     item3 = ui.TextInput(
+#         label='3번째 아이템',
+#         placeholder='예: 패닉소울',
+#         style=discord.TextStyle.short,
+#         max_length=50,
+#         required=False
+#     )
+#     
+#     item4 = ui.TextInput(
+#         label='4번째 아이템',
+#         placeholder='예: 풍마반지',
+#         style=discord.TextStyle.short,
+#         max_length=50,
+#         required=False
+#     )
+#     
+#     item5 = ui.TextInput(
+#         label='5번째 아이템',
+#         placeholder='예: 청혈주',
+#         style=discord.TextStyle.short,
+#         max_length=50,
+#         required=False
+#     )
+#     
+#     async def on_submit(self, interaction: discord.Interaction):
+#         try:
+#             items = {}
+#             item_inputs = [self.item1, self.item2, self.item3, self.item4, self.item5]
+#             
+#             for i, item_input in enumerate(item_inputs, 1):
+#                 if item_input.value.strip():
+#                     items[i] = item_input.value.strip()
+#             
+#             if not items:
+#                 await interaction.response.send_message("❌ 최소 1개의 아이템은 입력해야 합니다.", ephemeral=True)
+#                 return
+#             
+#             # 세이브코드 생성
+#             try:
+#                 savecode = create_custom_savecode(self.player_name, items)
+#                 
+#                 embed = discord.Embed(
+#                     title="✅ 세이브코드 생성 완료",
+#                     description=f"**플레이어**: {self.player_name}",
+#                     color=0x00ff00
+#                 )
+#                 
+#                 embed.add_field(
+#                     name="🔮 생성된 세이브코드",
+#                     value=f"```{savecode}```",
+#                     inline=False
+#                 )
+#                 
+#                 item_list = []
+#                 for slot, item_name in items.items():
+#                     item_list.append(f"{slot}번째: {item_name}")
+#                 
+#                 embed.add_field(
+#                     name="🎒 설정된 아이템",
+#                     value="\n".join(item_list),
+#                     inline=False
+#                 )
+#                 
+#                 embed.set_footer(text="생성된 세이브코드는 자동으로 검증되었습니다.")
+#                 
+#                 await interaction.response.send_message(embed=embed, ephemeral=True)
+#                 
+#             except Exception as e:
+#                 await interaction.response.send_message(f"❌ 세이브코드 생성 중 오류: {e}", ephemeral=True)
+#                 
+#         except Exception as e:
+#             logger.error(f"아이템 기반 세이브코드 생성 중 오류: {e}")
+#             await interaction.response.send_message(f"❌ 처리 중 오류 발생: {e}", ephemeral=True)
+
+
+# class CustomSaveCodeModal(ui.Modal, title='📊 커스텀 세이브코드 생성'):
+#     """커스텀 세이브코드 생성 모달"""
+#     
+#     def __init__(self, encoder, player_name):
+#         super().__init__()
+#         self.encoder = encoder
+#         self.player_name = player_name
+#     
+#     values_input = ui.TextInput(
+#         label='데이터 값들 (인덱스:값 형식)',
+#         placeholder='예: 0:123456 1:999 2:456789',
+#         style=discord.TextStyle.paragraph,
+#         max_length=1000,
+#         required=True
+#     )
+#     
+#     async def on_submit(self, interaction: discord.Interaction):
+#         try:
+#             # 입력 파싱
+#             values_text = self.values_input.value.strip()
+#             other_values = {}
+#             
+#             for pair in values_text.split():
+#                 try:
+#                     index_str, value_str = pair.split(':')
+#                     index = int(index_str)
+#                     value = int(value_str)
+#                     other_values[index] = value
+#                 except ValueError:
+#                     await interaction.response.send_message(f"❌ 잘못된 형식: {pair}. '인덱스:값' 형식으로 입력해주세요.", ephemeral=True)
+#                     return
+#             
+#             if not other_values:
+#                 await interaction.response.send_message("❌ 최소 1개의 값은 입력해야 합니다.", ephemeral=True)
+#                 return
+#             
+#             # 세이브코드 생성
+#             try:
+#                 savecode = create_custom_savecode(self.player_name, None, other_values)
+#                 
+#                 embed = discord.Embed(
+#                     title="✅ 커스텀 세이브코드 생성 완료",
+#                     description=f"**플레이어**: {self.player_name}",
+#                     color=0x00ff00
+#                 )
+#                 
+#                 embed.add_field(
+#                     name="🔮 생성된 세이브코드",
+#                     value=f"```{savecode}```",
+#                     inline=False
+#                 )
+#                 
+#                 values_list = []
+#                 for index, value in other_values.items():
+#                     values_list.append(f"슬롯 {index}: {value}")
+#                 
+#                 embed.add_field(
+#                     name="📊 설정된 값들",
+#                     value="\n".join(values_list),
+#                     inline=False
+#                 )
+#                 
+#                 embed.set_footer(text="생성된 세이브코드는 자동으로 검증되었습니다.")
+#                 
+#                 await interaction.response.send_message(embed=embed, ephemeral=True)
+#                 
+#             except Exception as e:
+#                 await interaction.response.send_message(f"❌ 세이브코드 생성 중 오류: {e}", ephemeral=True)
+#                 
+#         except Exception as e:
+#             logger.error(f"커스텀 세이브코드 생성 중 오류: {e}")
+#             await interaction.response.send_message(f"❌ 처리 중 오류 발생: {e}", ephemeral=True)
+
+
+# class SaveCodeCreationView(ui.View):
+#     """세이브코드 생성 View"""
+#     
+#     def __init__(self, encoder):
+#         super().__init__(timeout=300)
+#         self.encoder = encoder
+#         self.player_name = None
+#     
+#     @ui.button(label="🎒 아이템 기반 생성", style=discord.ButtonStyle.primary, emoji="🎒")
+#     async def item_based_creation(self, interaction: discord.Interaction, button: ui.Button):
+#         """아이템 기반 세이브코드 생성"""
+#         # 상호작용에서 플레이어 이름 추출
+#         embed_desc = interaction.message.embeds[0].description
+#         player_name = embed_desc.split("**플레이어**: ")[1].split("\n")[0]
+#         
+#         modal = SaveCodeCreationModal(self.encoder, player_name)
+#         await interaction.response.send_modal(modal)
+#     
+#     @ui.button(label="📊 커스텀 생성", style=discord.ButtonStyle.secondary, emoji="📊")
+#     async def custom_creation(self, interaction: discord.Interaction, button: ui.Button):
+#         """커스텀 세이브코드 생성"""
+#         # 상호작용에서 플레이어 이름 추출
+#         embed_desc = interaction.message.embeds[0].description
+#         player_name = embed_desc.split("**플레이어**: ")[1].split("\n")[0]
+#         
+#         modal = CustomSaveCodeModal(self.encoder, player_name)
+#         await interaction.response.send_modal(modal)
+
+
+class SaveCodeBot:
+    """아이템 기반 세이브코드 생성 모달"""
+    
+    def __init__(self, encoder, player_name):
+        super().__init__()
+        self.encoder = encoder
+        self.player_name = player_name
+    
+    item1 = ui.TextInput(
+        label='1번째 아이템',
+        placeholder='예: 예언의 손길',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=False
+    )
+    
+    item2 = ui.TextInput(
+        label='2번째 아이템',
+        placeholder='예: 사무엘의 영혼',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=False
+    )
+    
+    item3 = ui.TextInput(
+        label='3번째 아이템',
+        placeholder='예: 패닉소울',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=False
+    )
+    
+    item4 = ui.TextInput(
+        label='4번째 아이템',
+        placeholder='예: 풍마반지',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=False
+    )
+    
+    item5 = ui.TextInput(
+        label='5번째 아이템',
+        placeholder='예: 청혈주',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=False
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            items = {}
+            item_inputs = [self.item1, self.item2, self.item3, self.item4, self.item5]
+            
+            for i, item_input in enumerate(item_inputs, 1):
+                if item_input.value.strip():
+                    items[i] = item_input.value.strip()
+            
+            if not items:
+                await interaction.response.send_message("❌ 최소 1개의 아이템은 입력해야 합니다.", ephemeral=True)
+                return
+            
+            # 세이브코드 생성
+            try:
+                savecode = create_custom_savecode(self.player_name, items)
+                
+                embed = discord.Embed(
+                    title="✅ 세이브코드 생성 완료",
+                    description=f"**플레이어**: {self.player_name}",
+                    color=0x00ff00
+                )
+                
+                embed.add_field(
+                    name="🔮 생성된 세이브코드",
+                    value=f"```{savecode}```",
+                    inline=False
+                )
+                
+                item_list = []
+                for slot, item_name in items.items():
+                    item_list.append(f"{slot}번째: {item_name}")
+                
+                embed.add_field(
+                    name="🎒 설정된 아이템",
+                    value="\n".join(item_list),
+                    inline=False
+                )
+                
+                embed.set_footer(text="생성된 세이브코드는 자동으로 검증되었습니다.")
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                await interaction.response.send_message(f"❌ 세이브코드 생성 중 오류: {e}", ephemeral=True)
+                
+        except Exception as e:
+            logger.error(f"아이템 기반 세이브코드 생성 중 오류: {e}")
+            await interaction.response.send_message(f"❌ 처리 중 오류 발생: {e}", ephemeral=True)
+
+
+class CustomSaveCodeModal(ui.Modal, title='📊 커스텀 세이브코드 생성'):
+    """커스텀 세이브코드 생성 모달"""
+    
+    def __init__(self, encoder, player_name):
+        super().__init__()
+        self.encoder = encoder
+        self.player_name = player_name
+    
+    values_input = ui.TextInput(
+        label='데이터 값들 (인덱스:값 형식)',
+        placeholder='예: 0:123456 1:999 2:456789',
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # 입력 파싱
+            values_text = self.values_input.value.strip()
+            other_values = {}
+            
+            for pair in values_text.split():
+                try:
+                    index_str, value_str = pair.split(':')
+                    index = int(index_str)
+                    value = int(value_str)
+                    other_values[index] = value
+                except ValueError:
+                    await interaction.response.send_message(f"❌ 잘못된 형식: {pair}. '인덱스:값' 형식으로 입력해주세요.", ephemeral=True)
+                    return
+            
+            if not other_values:
+                await interaction.response.send_message("❌ 최소 1개의 값은 입력해야 합니다.", ephemeral=True)
+                return
+            
+            # 세이브코드 생성
+            try:
+                savecode = create_custom_savecode(self.player_name, None, other_values)
+                
+                embed = discord.Embed(
+                    title="✅ 커스텀 세이브코드 생성 완료",
+                    description=f"**플레이어**: {self.player_name}",
+                    color=0x00ff00
+                )
+                
+                embed.add_field(
+                    name="🔮 생성된 세이브코드",
+                    value=f"```{savecode}```",
+                    inline=False
+                )
+                
+                values_list = []
+                for index, value in other_values.items():
+                    values_list.append(f"슬롯 {index}: {value}")
+                
+                embed.add_field(
+                    name="📊 설정된 값들",
+                    value="\n".join(values_list),
+                    inline=False
+                )
+                
+                embed.set_footer(text="생성된 세이브코드는 자동으로 검증되었습니다.")
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+            except Exception as e:
+                await interaction.response.send_message(f"❌ 세이브코드 생성 중 오류: {e}", ephemeral=True)
+                
+        except Exception as e:
+            logger.error(f"커스텀 세이브코드 생성 중 오류: {e}")
+            await interaction.response.send_message(f"❌ 처리 중 오류 발생: {e}", ephemeral=True)
+
+
+# class SaveCodeCreationView(ui.View):
+#     """세이브코드 생성 View"""
+#     
+#     def __init__(self, encoder):
+#         super().__init__(timeout=300)
+#         self.encoder = encoder
+#         self.player_name = None
+#     
+#     @ui.button(label="🎒 아이템 기반 생성", style=discord.ButtonStyle.primary, emoji="🎒")
+#     async def item_based_creation(self, interaction: discord.Interaction, button: ui.Button):
+#         """아이템 기반 세이브코드 생성"""
+#         # 상호작용에서 플레이어 이름 추출
+#         embed_desc = interaction.message.embeds[0].description
+#         player_name = embed_desc.split("**플레이어**: ")[1].split("\n")[0]
+#         
+#         modal = SaveCodeCreationModal(self.encoder, player_name)
+#         await interaction.response.send_modal(modal)
+#     
+#     @ui.button(label="📊 커스텀 생성", style=discord.ButtonStyle.secondary, emoji="📊")
+#     async def custom_creation(self, interaction: discord.Interaction, button: ui.Button):
+#         """커스텀 세이브코드 생성"""
+#         # 상호작용에서 플레이어 이름 추출
+#         embed_desc = interaction.message.embeds[0].description
+#         player_name = embed_desc.split("**플레이어**: ")[1].split("\n")[0]
+#         
+#         modal = CustomSaveCodeModal(self.encoder, player_name)
+#         await interaction.response.send_modal(modal)
+
+
 class SaveCodeBot:
     """디스코드 세이브코드 봇 클래스"""
     
     def __init__(self):
         self.config = Config()
         self.decoder = SaveCodeDecoder()
+        self.encoder = SaveCodeEncoder()  # 세이브코드 인코더 초기화
         self.item_searcher = ItemSearcher()  # 아이템 검색기 초기화
         self.core_optimizer = CoreOptimizer()  # 코어 최적화기 초기화
         self.raid_system = RaidWaitingSystem()  # 레이드 대기 시스템 초기화
@@ -2143,6 +2550,27 @@ class SaveCodeBot:
         
         self._setup_events()
         self._setup_commands()
+    
+    def _check_savecode_permission(self, ctx: commands.Context) -> bool:
+        """세이브코드 생성 권한 검사"""
+        # 관리자 전용 모드가 활성화된 경우
+        if self.config.SAVECODE_ADMIN_ONLY:
+            # 서버 관리자 권한 확인
+            if ctx.author.guild_permissions.administrator:
+                return True
+        
+        # 허용된 사용자 ID 확인
+        if ctx.author.id in self.config.SAVECODE_ALLOWED_USERS:
+            return True
+        
+        # 허용된 역할 확인
+        if ctx.guild and hasattr(ctx.author, 'roles'):
+            user_role_names = [role.name for role in ctx.author.roles]
+            for allowed_role in self.config.SAVECODE_ALLOWED_ROLES:
+                if allowed_role in user_role_names:
+                    return True
+        
+        return False
     
     def _setup_events(self):
         """이벤트 핸들러 설정"""
@@ -2756,6 +3184,18 @@ class SaveCodeBot:
             )
             
             embed.add_field(
+                name="/세이브생성 <플레이어이름> <캐릭터ID> <나무>",
+                value="🔮 **세이브코드 생성** 🔐\n플레이어 정보로 세이브코드를 생성합니다.\n\n**사용 예시:**\n`/세이브생성 홍길동 37 50000`\n• 플레이어 이름: 홍길동\n• 캐릭터 ID: 37 (종말의 네피림)\n• 나무: 50,000\n\n💡 캐릭터 ID를 모르면 `/캐릭터` 명령어로 검색하세요!\n\n⚠️ **권한 필요**: 관리자 또는 허용된 사용자만 사용 가능",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="/캐릭터 <캐릭터이름>",
+                value="🔍 **캐릭터 검색**\n캐릭터 이름으로 ID를 검색합니다. 부분 검색도 지원합니다.\n\n**사용 예시:**\n`/캐릭터 환골` → '환골탈퇴' 찾기\n`/캐릭터 네피림` → '종말의 네피림' 찾기\n`/캐릭터 데몬` → '데몬' 찾기\n\n• 정확한 이름이나 일부만 입력해도 검색 가능\n• 검색 결과에서 ID를 확인하여 `/세이브생성`에 사용",
+                inline=False
+            )
+            
+            embed.add_field(
                 name="/도움말",
                 value="이 도움말을 표시합니다.",
                 inline=False
@@ -2769,7 +3209,7 @@ class SaveCodeBot:
             
             embed.add_field(
                 name="⚙️ 관리자 명령어",
-                value="/레이드채널 [채널ID] - 레이드 버튼을 보낼 채널 설정\n/레이드메시지 - 현재 채널에 레이드 버튼 메시지 보내기 ⭐**필수**",
+                value="/레이드채널 [채널ID] - 레이드 버튼을 보낼 채널 설정\n/레이드메시지 - 현재 채널에 레이드 버튼 메시지 보내기 ⭐**필수**\n/세이브권한 - 세이브코드 생성 권한 관리 🔐",
                 inline=False
             )
             
@@ -2922,6 +3362,338 @@ class SaveCodeBot:
             except Exception as e:
                 logger.error(f"레이드 메시지 전송 중 오류: {e}")
                 await ctx.send(f"❌ 레이드 메시지 전송 중 오류 발생: {e}")
+        
+        @self.bot.command(name='세이브권한', help='세이브코드 생성 권한을 관리합니다 (관리자 전용)')
+        @commands.has_permissions(administrator=True)
+        async def manage_savecode_permission(ctx: commands.Context, action: str = None, *, target: str = None):
+            """세이브코드 생성 권한 관리 명령어 (관리자 전용)"""
+            try:
+                if action is None:
+                    # 현재 권한 설정 표시
+                    embed = discord.Embed(
+                        title="🔐 세이브코드 생성 권한 설정",
+                        description="현재 세이브코드 생성 권한 설정입니다.",
+                        color=0x3498db
+                    )
+                    
+                    # 관리자 전용 모드
+                    admin_status = "✅ 활성화" if self.config.SAVECODE_ADMIN_ONLY else "❌ 비활성화"
+                    embed.add_field(
+                        name="👑 관리자 전용 모드",
+                        value=admin_status,
+                        inline=False
+                    )
+                    
+                    # 허용된 역할들
+                    if self.config.SAVECODE_ALLOWED_ROLES:
+                        roles_text = "\n".join([f"• {role}" for role in self.config.SAVECODE_ALLOWED_ROLES])
+                        embed.add_field(
+                            name="🎭 허용된 역할",
+                            value=roles_text,
+                            inline=False
+                        )
+                    else:
+                        embed.add_field(
+                            name="🎭 허용된 역할",
+                            value="없음",
+                            inline=False
+                        )
+                    
+                    # 허용된 사용자들
+                    if self.config.SAVECODE_ALLOWED_USERS:
+                        users_text = "\n".join([f"• <@{user_id}>" for user_id in self.config.SAVECODE_ALLOWED_USERS])
+                        embed.add_field(
+                            name="👤 허용된 사용자",
+                            value=users_text,
+                            inline=False
+                        )
+                    else:
+                        embed.add_field(
+                            name="👤 허용된 사용자",
+                            value="없음",
+                            inline=False
+                        )
+                    
+                    embed.add_field(
+                        name="💡 사용법",
+                        value="`/세이브권한 상태` - 현재 설정 확인\n`/세이브권한 도움말` - 상세 사용법 확인",
+                        inline=False
+                    )
+                    
+                    await ctx.send(embed=embed)
+                    return
+                
+                if action.lower() == "도움말":
+                    embed = discord.Embed(
+                        title="📖 세이브코드 권한 관리 도움말",
+                        description="세이브코드 생성 권한을 관리하는 방법입니다.",
+                        color=0x00ff00
+                    )
+                    
+                    embed.add_field(
+                        name="⚠️ 주의사항",
+                        value="현재 권한 설정은 런타임에만 적용됩니다.\n서버 재시작 시 기본 설정으로 돌아갑니다.\n영구적인 설정은 환경변수나 .env 파일을 수정하세요.",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="🔧 환경변수 설정",
+                        value="`.env` 파일에 다음과 같이 설정하세요:\n```env\nSAVECODE_ADMIN_ONLY=false\nSAVECODE_ALLOWED_ROLES=모더레이터,세이브관리자\nSAVECODE_ALLOWED_USERS=123456789,987654321\n```",
+                        inline=False
+                    )
+                    
+                    await ctx.send(embed=embed)
+                    return
+                
+                if action.lower() == "상태":
+                    # 상태 확인은 기본 동작과 동일
+                    await manage_savecode_permission(ctx)
+                    return
+                
+                await ctx.send("❌ 올바르지 않은 명령어입니다. `/세이브권한 도움말`을 참고하세요.")
+                
+            except commands.MissingPermissions:
+                embed = discord.Embed(
+                    title="❌ 권한 부족",
+                    description="이 명령어는 관리자만 사용할 수 있습니다.",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed)
+            except Exception as e:
+                logger.error(f"세이브코드 권한 관리 중 오류: {e}")
+                await ctx.send(f"❌ 세이브코드 권한 관리 중 오류 발생: {e}")
+        
+        @self.bot.command(name='세이브생성', help='플레이어 정보로 세이브코드를 생성합니다. 사용법: /세이브생성 [플레이어이름] [캐릭터ID] [나무]')
+        async def create_savecode_command(ctx: commands.Context, player_name: str, character_id: int, lumber: int):
+            """세이브코드 생성 명령어"""
+            try:
+                # 권한 검사
+                if not self._check_savecode_permission(ctx):
+                    embed = discord.Embed(
+                        title="❌ 권한 없음",
+                        description="세이브코드 생성 권한이 없습니다.",
+                        color=0xff0000
+                    )
+                    
+                    permission_info = []
+                    if self.config.SAVECODE_ADMIN_ONLY:
+                        permission_info.append("• 서버 관리자 권한")
+                    if self.config.SAVECODE_ALLOWED_ROLES:
+                        roles_text = ", ".join(self.config.SAVECODE_ALLOWED_ROLES)
+                        permission_info.append(f"• 허용된 역할: {roles_text}")
+                    if self.config.SAVECODE_ALLOWED_USERS:
+                        permission_info.append("• 허용된 사용자 목록에 포함")
+                    
+                    if permission_info:
+                        embed.add_field(
+                            name="🔐 필요한 권한",
+                            value="\n".join(permission_info),
+                            inline=False
+                        )
+                    
+                    embed.add_field(
+                        name="💡 안내",
+                        value="관리자에게 권한 요청을 해주세요.",
+                        inline=False
+                    )
+                    
+                    await ctx.send(embed=embed)
+                    return
+                # 입력값 검증
+                if lumber < 0:
+                    await ctx.send("❌ 나무는 0 이상의 값이어야 합니다.")
+                    return
+                
+                if character_id < 0 or character_id > 100:
+                    await ctx.send("❌ 캐릭터 ID는 0~100 사이의 값이어야 합니다.")
+                    return
+                
+                # 캐릭터 이름 조회
+                import json
+                try:
+                    with open('CharList_by_id.json', 'r', encoding='utf-8') as f:
+                        char_list = json.load(f)
+                    character_name = char_list.get(str(character_id), f"Unknown Character({character_id})")
+                except:
+                    character_name = f"Character ID {character_id}"
+                
+                # 기본 로드 데이터 생성 (모든 값을 0으로 초기화)
+                load_data = [0] * len(self.config.UDG_SAVE_VALUE_LENGTH)
+                
+                # 게임 데이터 구조에 맞게 설정 (0-based 인덱스)
+                # refactored_bot.py 방식: 15개 배열, 인덱스 0~14
+                scale_factor = 100
+                
+                load_data[0] = 0                           # 골드 (기본값 0) - 원래 load[1]에서 load[0]으로
+                load_data[14] = lumber // scale_factor     # 나무 (100으로 나누어 저장) - 원래 load[15]에서 load[14]로
+                load_data[13] = character_id               # 캐릭터 타입 ID - 원래 load[14]에서 load[13]으로
+                load_data[12] = 1                          # 레벨 (기본값 1) - 원래 load[13]에서 load[12]로
+                load_data[10] = 0                          # 경험치 (기본값 0) - 원래 load[11]에서 load[10]으로
+                # 아이템 슬롯들: load_data[1], [3], [5], [7], [9], [11] (refactored_bot.py ITEM_SLOTS)
+                
+                # 세이브코드 생성
+                savecode = self.encoder.encode_savecode(load_data, player_name)
+                
+                # 검증
+                is_valid = self.decoder.validate_savecode(savecode, player_name)
+                
+                embed = discord.Embed(
+                    title="✅ 세이브코드 생성 완료" if is_valid else "⚠️ 세이브코드 생성됨 (검증 실패)",
+                    description=f"**플레이어**: {player_name}\n**캐릭터**: {character_name} (ID: {character_id})",
+                    color=0x00ff00 if is_valid else 0xffaa00
+                )
+                
+                embed.add_field(
+                    name="🔮 생성된 세이브코드",
+                    value=f"```{savecode}```",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="📊 설정된 값들",
+                    value=f"🌳 나무: {lumber:,}\n💰 골드: 0 (기본값)\n👤 캐릭터: {character_name}",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="✅ 검증 결과",
+                    value="세이브코드가 유효합니다." if is_valid else "⚠️ 검증에 실패했지만 코드는 생성되었습니다.",
+                    inline=False
+                )
+                
+                embed.set_footer(text=f"캐릭터 ID: {character_id} | 생성 시간: {ctx.message.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                await ctx.send(embed=embed)
+                
+            except ValueError as e:
+                await ctx.send(f"❌ 잘못된 입력값입니다. 캐릭터 ID와 나무는 숫자여야 합니다.\n오류: {e}")
+            except Exception as e:
+                logger.error(f"세이브코드 생성 중 오류: {e}")
+                await ctx.send(f"❌ 세이브코드 생성 중 오류 발생: {e}")
+        
+        @self.bot.command(name='캐릭터', help='캐릭터 이름으로 ID를 검색합니다. 부분 검색도 지원합니다. 사용법: /캐릭터 [캐릭터이름]')
+        async def character_search_command(ctx: commands.Context, *, character_name: str):
+            """캐릭터 검색 명령어"""
+            try:
+                from character_searcher import CharacterSearcher
+
+                # CharacterSearcher 인스턴스 생성
+                searcher = CharacterSearcher()
+                
+                # 캐릭터 검색 실행
+                results = searcher.search_character(character_name)
+                
+                if results['success']:
+                    characters = results['results']
+                    
+                    if len(characters) == 1:
+                        # 정확히 하나의 결과
+                        char_id, char_name = characters[0]
+                        embed = discord.Embed(
+                            title="🔍 캐릭터 검색 결과",
+                            description=f"'{character_name}'에 대한 검색 결과입니다.",
+                            color=0x00ff00
+                        )
+                        
+                        embed.add_field(
+                            name="✅ 찾은 캐릭터",
+                            value=f"**이름**: {char_name}\n**ID**: {char_id}",
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="💡 사용법",
+                            value=f"`/세이브생성 플레이어이름 {char_id} 나무수치`로 세이브코드를 생성할 수 있습니다.",
+                            inline=False
+                        )
+                        
+                    elif len(characters) <= 10:
+                        # 여러 결과이지만 10개 이하
+                        embed = discord.Embed(
+                            title="🔍 캐릭터 검색 결과",
+                            description=f"'{character_name}'에 대한 검색 결과입니다. ({len(characters)}개 발견)",
+                            color=0x3498db
+                        )
+                        
+                        result_text = ""
+                        for char_id, char_name in characters:
+                            result_text += f"**{char_name}** (ID: {char_id})\n"
+                        
+                        embed.add_field(
+                            name="📋 검색 결과",
+                            value=result_text,
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="💡 사용법",
+                            value="원하는 캐릭터의 ID를 사용하여 `/세이브생성 플레이어이름 [ID] 나무수치`로 세이브코드를 생성하세요.",
+                            inline=False
+                        )
+                        
+                    else:
+                        # 결과가 너무 많음 (10개 초과)
+                        embed = discord.Embed(
+                            title="🔍 캐릭터 검색 결과",
+                            description=f"'{character_name}'에 대한 검색 결과가 너무 많습니다. ({len(characters)}개 발견)",
+                            color=0xff9900
+                        )
+                        
+                        # 처음 10개만 표시
+                        result_text = ""
+                        for char_id, char_name in characters[:10]:
+                            result_text += f"**{char_name}** (ID: {char_id})\n"
+                        
+                        embed.add_field(
+                            name="📋 검색 결과 (처음 10개)",
+                            value=result_text,
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="⚠️ 알림",
+                            value=f"총 {len(characters)}개의 결과가 있습니다. 더 구체적인 이름으로 검색해보세요.",
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="💡 사용법",
+                            value="원하는 캐릭터의 ID를 사용하여 `/세이브생성 플레이어이름 [ID] 나무수치`로 세이브코드를 생성하세요.",
+                            inline=False
+                        )
+                    
+                    embed.set_footer(text=f"검색어: '{character_name}' | 요청자: {ctx.author.display_name}")
+                    await ctx.send(embed=embed)
+                    
+                else:
+                    # 검색 결과 없음
+                    embed = discord.Embed(
+                        title="❌ 검색 결과 없음",
+                        description=f"'{character_name}'과 일치하는 캐릭터를 찾을 수 없습니다.",
+                        color=0xff0000
+                    )
+                    
+                    embed.add_field(
+                        name="💡 검색 팁",
+                        value="• 부분 검색이 가능합니다 (예: '환골' → '환골탈퇴')\n• 띄어쓰기와 특수문자를 확인해보세요\n• 캐릭터 이름의 일부만 입력해도 됩니다",
+                        inline=False
+                    )
+                    
+                    embed.add_field(
+                        name="🔍 다른 방법",
+                        value="캐릭터 ID를 직접 알고 있다면 `/세이브생성` 명령어에서 바로 사용할 수 있습니다.",
+                        inline=False
+                    )
+                    
+                    embed.set_footer(text=f"검색어: '{character_name}' | 요청자: {ctx.author.display_name}")
+                    await ctx.send(embed=embed)
+                    
+            except ImportError:
+                await ctx.send("❌ 캐릭터 검색 모듈을 찾을 수 없습니다. 개발자에게 문의해주세요.")
+                logger.error("character_searcher 모듈을 import할 수 없습니다.")
+            except Exception as e:
+                logger.error(f"캐릭터 검색 중 오류: {e}")
+                await ctx.send(f"❌ 캐릭터 검색 중 오류 발생: {e}")
         
         # 기존 명령어들은 주석 처리 (현재는 버튼 기반 시스템 사용)
         # @self.bot.command(name='대기', help='레이드 대기 목록에 등록합니다')
