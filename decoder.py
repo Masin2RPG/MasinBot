@@ -61,9 +61,9 @@ class SaveCodeDecoder:
             char = chr(byte)
             try:
                 index = self.config.STRING_SOURCE.index(char) + 1
-                total += index * (i + 1)
             except ValueError:
-                logger.warning(f"유효하지 않은 문자: '{char}'")
+                index = -1  # 원본 게임과 동일하게 -1 사용
+            total += index * (i + 1)
                 
         return total
     
@@ -108,17 +108,19 @@ class SaveCodeDecoder:
             value = self._convert_code_to_int(pair, use_play_type)
             numeric_string += f"{value:03d}"
         
-        # 세이브 값 길이에 따라 분할
-        load_data = []
+        # 세이브 값 길이에 따라 분할 (원본 게임과 동일하게 16개 배열)
+        load_data = [0] * len(self.config.UDG_SAVE_VALUE_LENGTH)  # 16개 배열로 초기화
         position = 0
+        save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
         
-        for length in self.config.UDG_SAVE_VALUE_LENGTH:
+        for i in range(1, save_size + 1):  # 1부터 15까지
+            length = self.config.UDG_SAVE_VALUE_LENGTH[i]
             if position + length > len(numeric_string):
                 # 데이터가 부족한 경우 0으로 채움
-                load_data.append(0)
+                load_data[i] = 0
             else:
                 chunk = numeric_string[position:position + length]
-                load_data.append(int(chunk) if chunk else 0)
+                load_data[i] = int(chunk) if chunk else 0
             position += length
         
         return load_data
@@ -128,15 +130,16 @@ class SaveCodeDecoder:
         try:
             load_data = self.decode_savecode(code)
             
-            if len(load_data) < 9:
+            if len(load_data) < 10:  # 최소 인덱스 9까지 필요
                 logger.error("로드 데이터가 충분하지 않습니다")
                 return False
             
-            # 체크섬 계산
+            # 체크섬 계산 (원본 게임과 동일하게)
             checksum = 0
-            for i, value in enumerate(load_data):
-                if i != 8:  # 9번째 인덱스(체크섬)는 제외
-                    checksum += value * (i + 1)
+            save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
+            for i in range(1, save_size + 1):  # 1부터 15까지
+                if i != 9:  # 9번째 인덱스(체크섬)는 제외
+                    checksum += load_data[i] * i
             
             # 게임 버전 보정
             if self.config.GAME_VERSION > 99:
@@ -148,11 +151,11 @@ class SaveCodeDecoder:
             name_value = self._calculate_string_value(player_name)
             checksum += name_value
             
-            # 체크섬 정규화
-            checksum %= self._get_nine_power(self.config.UDG_SAVE_VALUE_LENGTH[8])
+            # 체크섬 정규화 (원본 게임은 [9] 사용)
+            checksum %= self._get_nine_power(self.config.UDG_SAVE_VALUE_LENGTH[9])
             
             # 검증 결과 반환
-            is_valid = checksum == load_data[8]
+            is_valid = checksum == load_data[9]
             logger.info(f"세이브코드 검증: {'성공' if is_valid else '실패'}")
             return is_valid
             

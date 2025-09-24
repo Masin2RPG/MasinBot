@@ -61,21 +61,21 @@ class SaveCodeEncoder:
             char = chr(byte)
             try:
                 index = self.config.STRING_SOURCE.index(char) + 1
-                total += index * (i + 1)
             except ValueError:
-                logger.warning(f"유효하지 않은 문자: '{char}'")
+                index = -1  # 원본 게임과 동일하게 -1 사용
+            total += index * (i + 1)
                 
         return total
     
     def _calculate_checksum(self, load_data: List[int], player_name: str) -> int:
-        """체크섬 계산 (refactored_bot.py 방식과 동일하게)"""
+        """체크섬 계산 (원본 게임과 동일하게)"""
         checksum = 0
-        save_size = len(self.config.UDG_SAVE_VALUE_LENGTH)
+        save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
         
-        # 0-based 인덱스로 계산, (i + 1) 가중치 사용 (refactored_bot.py와 동일)
-        for i in range(save_size):
-            if i != 8:  # 8번째 인덱스(체크섬)는 제외
-                checksum += load_data[i] * (i + 1)
+        # 1-based 인덱스로 계산, i 가중치 사용 (원본 게임과 동일)
+        for i in range(1, save_size + 1):  # 1부터 15까지
+            if i != 9:  # 9번째 인덱스(체크섬)는 제외
+                checksum += load_data[i] * i
         
         # 게임 버전 보정
         if self.config.GAME_VERSION > 99:
@@ -87,8 +87,8 @@ class SaveCodeEncoder:
         name_value = self._calculate_string_value(player_name)
         checksum += name_value
         
-        # 체크섬 정규화 (refactored_bot.py는 [8] 사용)
-        checksum %= self._get_nine_power(self.config.UDG_SAVE_VALUE_LENGTH[8])
+        # 체크섬 정규화 (원본 게임은 [9] 사용)
+        checksum %= self._get_nine_power(self.config.UDG_SAVE_VALUE_LENGTH[9])
         
         return checksum
     
@@ -122,12 +122,12 @@ class SaveCodeEncoder:
             
             # 체크섬 계산 및 설정
             checksum = self._calculate_checksum(encoded_data, player_name)
-            encoded_data[8] = checksum  # 9번째 슬롯(인덱스 8)에 체크섬 저장
+            encoded_data[9] = checksum  # 10번째 슬롯(인덱스 9)에 체크섬 저장 (원본 게임과 동일)
             
-            # 로드 데이터를 문자열로 변환 (0번 인덱스부터 시작, refactored_bot.py와 동일)
+            # 로드 데이터를 문자열로 변환 (인덱스 1부터 시작, 원본 게임과 동일)
             numeric_string = ""
-            save_size = len(self.config.UDG_SAVE_VALUE_LENGTH)
-            for i in range(save_size):
+            save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
+            for i in range(1, save_size + 1):  # 1부터 15까지
                 value = encoded_data[i]
                 length = self.config.UDG_SAVE_VALUE_LENGTH[i]
                 formatted_value = f"{value:0{length}d}"

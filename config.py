@@ -60,9 +60,11 @@ class GameSettings:
     
     def __post_init__(self):
         if self.udg_save_value_length is None:
-            self.udg_save_value_length = [6, 3, 6, 3, 6, 3, 6, 3, 3, 3, 2, 3, 4, 2, 4]
+            # 원본 게임과 동일한 16개 배열 (인덱스 0은 사용하지 않음)
+            self.udg_save_value_length = [0, 6, 3, 6, 3, 6, 3, 6, 3, 3, 3, 2, 3, 4, 2, 4]
         if self.item_slots is None:
-            self.item_slots = [1, 3, 5, 7, 9, 11]
+            # 원본 게임과 동일한 아이템 슬롯 위치
+            self.item_slots = [2, 4, 6, 8, 10, 12]
 
 
 @dataclass

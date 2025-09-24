@@ -3517,19 +3517,19 @@ class SaveCodeBot:
                 except:
                     character_name = f"Character ID {character_id}"
                 
-                # 기본 로드 데이터 생성 (모든 값을 0으로 초기화)
+                # 기본 로드 데이터 생성 (원본 게임과 동일한 16개 배열)
                 load_data = [0] * len(self.config.UDG_SAVE_VALUE_LENGTH)
                 
-                # 게임 데이터 구조에 맞게 설정 (0-based 인덱스)
-                # refactored_bot.py 방식: 15개 배열, 인덱스 0~14
+                # 게임 데이터 구조에 맞게 설정 (원본 게임과 동일)
+                # 인덱스 0은 사용하지 않고, 1~15 사용
                 scale_factor = 100
                 
-                load_data[0] = 0                           # 골드 (기본값 0) - 원래 load[1]에서 load[0]으로
-                load_data[14] = lumber // scale_factor     # 나무 (100으로 나누어 저장) - 원래 load[15]에서 load[14]로
-                load_data[13] = character_id               # 캐릭터 타입 ID - 원래 load[14]에서 load[13]으로
-                load_data[12] = 1                          # 레벨 (기본값 1) - 원래 load[13]에서 load[12]로
-                load_data[10] = 0                          # 경험치 (기본값 0) - 원래 load[11]에서 load[10]으로
-                # 아이템 슬롯들: load_data[1], [3], [5], [7], [9], [11] (refactored_bot.py ITEM_SLOTS)
+                load_data[1] = 0                           # 골드 (기본값 0) - load[1]
+                load_data[15] = lumber // scale_factor     # 나무 (100으로 나누어 저장) - load[15]
+                load_data[14] = character_id               # 캐릭터 타입 ID - load[14]
+                load_data[13] = 1                          # 레벨 (기본값 1) - load[13]
+                load_data[11] = 0                          # 경험치 (기본값 0) - load[11]
+                # 아이템 슬롯들: load_data[2], [4], [6], [8], [10], [12] (원본 게임과 동일)
                 
                 # 세이브코드 생성
                 savecode = self.encoder.encode_savecode(load_data, player_name)
