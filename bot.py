@@ -15,6 +15,7 @@ from core_optimizer import CoreOptimizer
 from decoder import SaveCodeDecoder
 from encoder import SaveCodeEncoder
 from item_searcher import ItemSearcher
+from items import ItemDatabase
 from optimization_manager import OptimizationManager, OptimizationView
 from raid_system import RaidWaitingSystem
 from savecode_decoder import decode_savecode2, extract_save_data
@@ -2530,6 +2531,7 @@ class SaveCodeBot:
         self.decoder = SaveCodeDecoder()
         self.encoder = SaveCodeEncoder()  # 세이브코드 인코더 초기화
         self.item_searcher = ItemSearcher()  # 아이템 검색기 초기화
+        self.item_db = ItemDatabase()  # 아이템 데이터베이스 초기화
         self.core_optimizer = CoreOptimizer()  # 코어 최적화기 초기화
         self.raid_system = RaidWaitingSystem()  # 레이드 대기 시스템 초기화
         self.savecode_manager = SaveCodeManager()  # 세이브코드 관리자 초기화
@@ -3265,8 +3267,8 @@ class SaveCodeBot:
             )
             
             embed.add_field(
-                name="/세이브생성 <플레이어이름> <캐릭터ID> <나무>",
-                value="🔮 **세이브코드 생성** 🔐\n플레이어 정보로 세이브코드를 생성합니다.\n\n**사용 예시:**\n`/세이브생성 홍길동 37 50000`\n• 플레이어 이름: 홍길동\n• 캐릭터 ID: 37 (종말의 네피림)\n• 나무: 50,000\n\n💡 캐릭터 ID를 모르면 `/캐릭터` 명령어로 검색하세요!\n\n⚠️ **권한 필요**: 관리자 또는 허용된 사용자만 사용 가능",
+                name="/세이브생성 <플레이어이름> <캐릭터ID> <나무> [아이템1] [아이템2] [아이템3] [아이템4] [아이템5] [아이템6]",
+                value="🔮 **세이브코드 생성** 🔐\n플레이어 정보로 세이브코드를 생성합니다.\n\n**사용 예시:**\n`/세이브생성 홍길동 37 50000`\n`/세이브생성 홍길동 37 50000 1 5 10`\n`/세이브생성 홍길동 37 50000 264 266 268 270 272 274`\n• 플레이어 이름: 홍길동\n• 캐릭터 ID: 37 (종말의 네피림)\n• 나무: 50,000\n• 아이템1~6: 아이템 ID (선택사항, 0~281)\n\n💡 캐릭터 ID를 모르면 `/캐릭터` 명령어로 검색하세요!\n💡 아이템 ID를 모르면 `/값` 명령어로 검색하세요!\n\n⚠️ **권한 필요**: 관리자 또는 허용된 사용자만 사용 가능",
                 inline=False
             )
             
@@ -3544,8 +3546,8 @@ class SaveCodeBot:
                 logger.error(f"세이브코드 권한 관리 중 오류: {e}")
                 await ctx.send(f"❌ 세이브코드 권한 관리 중 오류 발생: {e}")
         
-        @self.bot.command(name='세이브생성', help='플레이어 정보로 세이브코드를 생성합니다. 사용법: /세이브생성 [플레이어이름] [캐릭터ID] [나무]')
-        async def create_savecode_command(ctx: commands.Context, player_name: str, character_id: int, lumber: int):
+        @self.bot.command(name='세이브생성', help='플레이어 정보로 세이브코드를 생성합니다. 사용법: /세이브생성 [플레이어이름] [캐릭터ID] [나무] [아이템1] [아이템2] [아이템3] [아이템4] [아이템5] [아이템6]')
+        async def create_savecode_command(ctx: commands.Context, player_name: str, character_id: int, lumber: int, item1: int = 0, item2: int = 0, item3: int = 0, item4: int = 0, item5: int = 0, item6: int = 0):
             """세이브코드 생성 명령어"""
             try:
                 # 권한 검사
@@ -3589,6 +3591,13 @@ class SaveCodeBot:
                     await ctx.send("❌ 캐릭터 ID는 0~100 사이의 값이어야 합니다.")
                     return
                 
+                # 아이템 ID 검증 (0~281 범위)
+                items = [item1, item2, item3, item4, item5, item6]
+                for i, item_id in enumerate(items):
+                    if item_id < 0 or item_id > 281:
+                        await ctx.send(f"❌ 아이템{i+1} ID는 0~281 사이의 값이어야 합니다. (입력값: {item_id})")
+                        return
+                
                 # 캐릭터 이름 조회
                 import json
                 try:
@@ -3610,7 +3619,14 @@ class SaveCodeBot:
                 load_data[14] = character_id               # 캐릭터 타입 ID - load[14]
                 load_data[13] = 1                          # 레벨 (기본값 1) - load[13]
                 load_data[11] = 0                          # 경험치 (기본값 0) - load[11]
-                # 아이템 슬롯들: load_data[2], [4], [6], [8], [10], [12] (원본 게임과 동일)
+                
+                # 아이템 슬롯들에 아이템 ID 설정: load_data[2], [4], [6], [8], [10], [12] (원본 게임과 동일)
+                items = [item1, item2, item3, item4, item5, item6]
+                item_slots = [2, 4, 6, 8, 10, 12]  # 아이템 슬롯 인덱스
+                
+                for i, item_id in enumerate(items):
+                    if i < len(item_slots) and item_id > 0:  # 0보다 큰 아이템 ID만 설정
+                        load_data[item_slots[i]] = item_id
                 
                 # 세이브코드 생성
                 savecode = self.encoder.encode_savecode(load_data, player_name)
@@ -3630,11 +3646,26 @@ class SaveCodeBot:
                     inline=False
                 )
                 
+                # 입력된 아이템들의 이름 가져오기
+                item_names = []
+                for item_id in items:
+                    if item_id > 0:
+                        item_name = self.item_db.get_item_name(item_id)
+                        item_names.append(f"{item_id}: {item_name}")
+                
                 embed.add_field(
                     name="📊 설정된 값들",
                     value=f"🌳 나무: {lumber:,}\n💰 골드: 0 (기본값)\n👤 캐릭터: {character_name}",
                     inline=False
                 )
+                
+                # 아이템이 있는 경우 아이템 정보 추가
+                if item_names:
+                    embed.add_field(
+                        name="🎒 설정된 아이템들",
+                        value="\n".join(item_names) if item_names else "아이템 없음",
+                        inline=False
+                    )
                 
                 embed.add_field(
                     name="✅ 검증 결과",
@@ -3684,7 +3715,7 @@ class SaveCodeBot:
                         
                         embed.add_field(
                             name="💡 사용법",
-                            value=f"`/세이브생성 플레이어이름 {char_id} 나무수치`로 세이브코드를 생성할 수 있습니다.",
+                            value=f"`/세이브생성 플레이어이름 {char_id} 나무수치 [아이템1] [아이템2] [아이템3] [아이템4] [아이템5] [아이템6]`로 세이브코드를 생성할 수 있습니다.",
                             inline=False
                         )
                         
