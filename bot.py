@@ -2715,24 +2715,28 @@ class SaveCodeBot:
                         response = "\n".join(items_list)
                         
                         # 우리엘 졸업 아이템 확인 (ID: 264, 266, 268, 270, 272, 274)
-                        uriel_item_names = set()
+                        uriel_item_ids = set()
                         for item in items_list:
                             if "거대한 죄의 십자가" in item:  # ID 264
-                                uriel_item_names.add("264")
+                                uriel_item_ids.add(264)
                             elif "영혼을 짓이기는 월계관" in item:  # ID 266
-                                uriel_item_names.add("266")
+                                uriel_item_ids.add(266)
                             elif "멸망을 부르는 피의 잔" in item:  # ID 268
-                                uriel_item_names.add("268")
+                                uriel_item_ids.add(268)
                             elif "심판하는자의 강인한 영혼" in item:  # ID 270
-                                uriel_item_names.add("270")
+                                uriel_item_ids.add(270)
                             elif "심판하는자의 강력한 영혼" in item:  # ID 272
-                                uriel_item_names.add("272")
+                                uriel_item_ids.add(272)
                             elif "심판하는자의 전능한 영혼" in item:  # ID 274
-                                uriel_item_names.add("274")
+                                uriel_item_ids.add(274)
                         
-                        # 우리엘 졸업 조건: 6개 아이템 모두 보유 (264, 266, 268, 270, 272, 274)
-                        required_uriel_items = {"264", "266", "268", "270", "272", "274"}
-                        is_uriel_graduate = required_uriel_items.issubset(uriel_item_names)
+                        # 우리엘 졸업 조건: 3개 쌍 중 하나라도 만족하면 됨
+                        # [264,270], [266,272], [268,274] 중 하나의 쌍이라도 모두 있으면 우리엘 졸업
+                        is_uriel_graduate = (
+                            (264 in uriel_item_ids and 270 in uriel_item_ids) or
+                            (266 in uriel_item_ids and 272 in uriel_item_ids) or
+                            (268 in uriel_item_ids and 274 in uriel_item_ids)
+                        )
                         
                         # 묵시록 레이드 아이템 확인 (죄: 가 포함된 아이템, 단 우리엘 졸업자는 제외)
                         has_apocalypse_item = any("죄:" in item for item in items_list)
@@ -2914,7 +2918,7 @@ class SaveCodeBot:
                     else:
                         stats_embed.add_field(
                             name="👼 우리엘 졸업 캐릭터",
-                            value="우리엘 졸업 아이템 세트를 모두 보유한 캐릭터가 없습니다",
+                            value="우리엘 졸업 아이템 쌍을 보유한 캐릭터가 없습니다",
                             inline=False
                         )
                     
