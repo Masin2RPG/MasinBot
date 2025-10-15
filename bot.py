@@ -2666,6 +2666,8 @@ class SaveCodeBot:
                 invalid_count = 0
                 characters = set()  # 중복 캐릭터 제거를 위한 set
                 character_counts = {}  # 캐릭터별 출현 횟수 추적
+                apocalypse_characters = set()  # 묵시록 레이드 졸업 캐릭터 (죄: 아이템 보유)
+                uriel_characters = set()  # 우리엘 졸업 캐릭터
                 
                 for code in codes:
                     print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
@@ -2711,6 +2713,35 @@ class SaveCodeBot:
                         # 아이템 추출
                         items_list = self.decoder.extract_items(code)
                         response = "\n".join(items_list)
+                        
+                        # 우리엘 졸업 아이템 확인 (ID: 264, 266, 268, 270, 272, 274)
+                        uriel_item_names = set()
+                        for item in items_list:
+                            if "거대한 죄의 십자가" in item:  # ID 264
+                                uriel_item_names.add("264")
+                            elif "영혼을 짓이기는 월계관" in item:  # ID 266
+                                uriel_item_names.add("266")
+                            elif "멸망을 부르는 피의 잔" in item:  # ID 268
+                                uriel_item_names.add("268")
+                            elif "심판하는자의 강인한 영혼" in item:  # ID 270
+                                uriel_item_names.add("270")
+                            elif "심판하는자의 강력한 영혼" in item:  # ID 272
+                                uriel_item_names.add("272")
+                            elif "심판하는자의 전능한 영혼" in item:  # ID 274
+                                uriel_item_names.add("274")
+                        
+                        # 우리엘 졸업 조건: 6개 아이템 모두 보유 (264, 266, 268, 270, 272, 274)
+                        required_uriel_items = {"264", "266", "268", "270", "272", "274"}
+                        is_uriel_graduate = required_uriel_items.issubset(uriel_item_names)
+                        
+                        # 묵시록 레이드 아이템 확인 (죄: 가 포함된 아이템, 단 우리엘 졸업자는 제외)
+                        has_apocalypse_item = any("죄:" in item for item in items_list)
+                        
+                        if is_uriel_graduate:
+                            uriel_characters.add(hero_name)
+                        elif has_apocalypse_item:
+                            # 우리엘 졸업이 아닌 경우에만 묵시록 졸업으로 카운트
+                            apocalypse_characters.add(hero_name)
                         
                         # 결과 전송 - Embed 사용
                         embed = discord.Embed(
@@ -2806,6 +2837,16 @@ class SaveCodeBot:
                         value=f"{len(characters)}건", 
                         inline=True
                     )
+                    stats_embed.add_field(
+                        name="😈 묵시록 레이드 졸업", 
+                        value=f"{len(apocalypse_characters)}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
+                        name="👼 우리엘 졸업", 
+                        value=f"{len(uriel_characters)}건", 
+                        inline=True
+                    )
                     
                     # 발견된 캐릭터 목록 추가
                     if characters:
@@ -2838,6 +2879,42 @@ class SaveCodeBot:
                         stats_embed.add_field(
                             name="🔄 중복된 캐릭터",
                             value="중복된 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 묵시록 레이드 졸업 캐릭터 목록 추가
+                    if apocalypse_characters:
+                        apocalypse_list = ", ".join(sorted(apocalypse_characters))
+                        if len(apocalypse_list) > 1024:  # Discord 필드 제한
+                            apocalypse_list = apocalypse_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="😈 묵시록 레이드 졸업 캐릭터",
+                            value=apocalypse_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="😈 묵시록 레이드 졸업 캐릭터",
+                            value="묵시록 레이드 아이템(죄:)을 보유한 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 우리엘 졸업 캐릭터 목록 추가
+                    if uriel_characters:
+                        uriel_list = ", ".join(sorted(uriel_characters))
+                        if len(uriel_list) > 1024:  # Discord 필드 제한
+                            uriel_list = uriel_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="👼 우리엘 졸업 캐릭터",
+                            value=uriel_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="👼 우리엘 졸업 캐릭터",
+                            value="우리엘 졸업 아이템 세트를 모두 보유한 캐릭터가 없습니다",
                             inline=False
                         )
                     
