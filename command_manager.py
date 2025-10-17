@@ -9,7 +9,6 @@ from typing import Dict, List
 import discord
 from discord.ext import commands
 
-from optimization_manager import OptimizationView
 from raid_system import RaidWaitingSystem
 from savecode_manager import SaveCodeManager
 
@@ -129,48 +128,6 @@ class SaveCodeCommands:
                 await ctx.send(f"❌ 영웅 정보 추출 중 오류 발생: {e}")
 
 
-class OptimizationCommands:
-    """최적화 관련 명령어 그룹"""
-    
-    def __init__(self, bot: commands.Bot, optimization_manager, core_optimizer):
-        self.bot = bot
-        self.optimization_manager = optimization_manager
-        self.core_optimizer = core_optimizer
-        self._register_commands()
-    
-    def _register_commands(self):
-        """최적화 관련 명령어 등록"""
-        
-        @self.bot.command(name='최적화', help='새로운 코어 최적화 시스템을 사용합니다')
-        async def optimization_command(ctx: commands.Context):
-            """새로운 최적화 시스템 명령어"""
-            embed = discord.Embed(
-                title="⚡ 새로운 코어 최적화 시스템",
-                description="개선된 UI로 더 편리한 최적화를 경험하세요!",
-                color=0x00ff00
-            )
-            
-            embed.add_field(
-                name="🔮 코어 설정",
-                value="전설, 영웅, 레어, 일반 코어의 개수를 설정하세요.",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="🎯 타겟 설정", 
-                value="힘, 지능, 민첩, 행운의 목표값을 설정하세요.",
-                inline=True
-            )
-            
-            embed.add_field(
-                name="⚡ 최적화 실행",
-                value="설정 완료 후 최적화를 실행하여 결과를 확인하세요.",
-                inline=True
-            )
-            
-            view = OptimizationView(self.optimization_manager)
-            await ctx.send(embed=embed, view=view)
-
 
 class RaidCommands:
     """레이드 관련 명령어 그룹"""
@@ -218,14 +175,7 @@ class UtilityCommands:
             )
             
             # 최적화 관련 명령어
-            embed.add_field(
-                name="⚡ 최적화 명령어",
-                value=(
-                    "`/최적화` - 새로운 코어 최적화 시스템\n"
-                    "`/젬` - 기존 젬 최적화 시스템\n"
-                ),
-                inline=False
-            )
+
             
             # 레이드 관련 기능
             embed.add_field(
@@ -255,13 +205,12 @@ class CommandManager:
     """명령어 시스템 전체 관리자"""
     
     def __init__(self, bot: commands.Bot, savecode_manager: SaveCodeManager, 
-                 optimization_manager, raid_system: RaidWaitingSystem, 
-                 decoder, core_optimizer, config):
+                 raid_system: RaidWaitingSystem, 
+                 decoder, config):
         self.bot = bot
         
         # 각 명령어 그룹 초기화
         self.savecode_commands = SaveCodeCommands(bot, savecode_manager, decoder)
-        self.optimization_commands = OptimizationCommands(bot, optimization_manager, core_optimizer)
         self.raid_commands = RaidCommands(bot, raid_system, config)
         self.utility_commands = UtilityCommands(bot)
     
@@ -269,7 +218,6 @@ class CommandManager:
         """명령어 그룹 목록 반환"""
         return {
             'savecode': self.savecode_commands,
-            'optimization': self.optimization_commands,
             'raid': self.raid_commands,
             'utility': self.utility_commands
         }
