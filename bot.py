@@ -11,6 +11,7 @@ from discord.ext import commands
 
 # 로컬 모듈 임포트
 from config import Config
+from coupon_integrated import format_coupon_result, process_coupon_simple
 from decoder import SaveCodeDecoder
 from encoder import SaveCodeEncoder, create_custom_savecode
 from item_searcher import ItemSearcher
@@ -284,6 +285,173 @@ class PartyRecruitmentModal(ui.Modal, title='📢 파티 모집하기'):
             
         except Exception as e:
             logger.error(f"파티 모집 알림 발송 중 전체 오류: {e}")
+
+
+class CouponProcessModal(ui.Modal, title='🎫 쿠폰 사용하기'):
+    """쿠폰 처리를 위한 모달"""
+    
+    def __init__(self, bot_instance):
+        super().__init__()
+        self.bot_instance = bot_instance
+    
+    coupon_code = ui.TextInput(
+        label='쿠폰 코드',
+        placeholder='쿠폰 코드를 입력해주세요',
+        style=discord.TextStyle.short,
+        max_length=50,
+        required=True
+    )
+    
+    player_name = ui.TextInput(
+        label='플레이어 이름',
+        placeholder='게임 내 플레이어 이름을 입력해주세요',
+        style=discord.TextStyle.short,
+        max_length=30,
+        required=True
+    )
+    
+    savecode = ui.TextInput(
+        label='세이브코드',
+        placeholder='현재 세이브코드를 입력해주세요 (MasinSaveV2_ 또는 원본 형식)',
+        style=discord.TextStyle.paragraph,
+        max_length=200,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """모달 제출 시 쿠폰 처리"""
+        try:
+            # 즉시 응답하여 타임아웃 방지
+            await interaction.response.defer(ephemeral=True)
+            
+            # 입력값 검증
+            coupon_code = self.coupon_code.value.strip()
+            player_name = self.player_name.value.strip()
+            savecode = self.savecode.value.strip()
+            
+            if not coupon_code or not player_name or not savecode:
+                await interaction.followup.send(
+                    "❌ 모든 필드를 올바르게 입력해주세요.",
+                    ephemeral=True
+                )
+                return
+            
+            # 처리 시작 메시지
+            processing_embed = discord.Embed(
+                title="🔄 쿠폰 처리 중...",
+                description="쿠폰을 확인하고 세이브코드를 처리하고 있습니다. 잠시만 기다려주세요.",
+                color=0xffff00
+            )
+            await interaction.followup.send(embed=processing_embed, ephemeral=True)
+            
+            # 쿠폰 처리 실행
+            result = process_coupon_simple(coupon_code, savecode, player_name)
+            
+            # 결과 처리
+            if result.success:
+                # 성공 시 DM으로 결과 전송
+                success_embed = discord.Embed(
+                    title="🎉 쿠폰 사용 성공!",
+                    color=0x00ff00
+                )
+                
+                success_embed.add_field(
+                    name="🎫 쿠폰 코드",
+                    value=f"`{result.coupon_code}`",
+                    inline=True
+                )
+                
+                success_embed.add_field(
+                    name="👤 플레이어",
+                    value=f"`{player_name}`",
+                    inline=True
+                )
+                
+                success_embed.add_field(
+                    name="💰 획득 리워드",
+                    value=f"골드: +{result.gold_gained:,}\n나무: +{result.lumber_gained:,}",
+                    inline=False
+                )
+                
+                success_embed.add_field(
+                    name="🔮 수정된 세이브코드",
+                    value=f"```{result.modified_savecode}```",
+                    inline=False
+                )
+                
+                success_embed.add_field(
+                    name="💡 사용 방법",
+                    value="게임에서 '불러오기'를 선택하고 위의 세이브코드를 입력하세요.",
+                    inline=False
+                )
+                
+                success_embed.set_footer(text=f"처리 완료 시간: {discord.utils.format_dt(discord.utils.utcnow(), style='F')}")
+                
+                try:
+                    await interaction.user.send(embed=success_embed)
+                    
+                    # 서버에서는 DM 전송 완료 메시지
+                    await interaction.edit_original_response(
+                        embed=discord.Embed(
+                            title="✅ 처리 완료",
+                            description="쿠폰이 성공적으로 처리되었습니다!\n결과를 개인 DM으로 발송했습니다.",
+                            color=0x00ff00
+                        )
+                    )
+                    
+                except discord.Forbidden:
+                    # DM을 보낼 수 없는 경우 서버에서 직접 표시
+                    await interaction.edit_original_response(embed=success_embed)
+                    
+            else:
+                # 실패 시 오류 메시지
+                error_embed = discord.Embed(
+                    title="❌ 쿠폰 사용 실패",
+                    description=result.error_message,
+                    color=0xff0000
+                )
+                
+                error_embed.add_field(
+                    name="🎫 쿠폰 코드",
+                    value=f"`{result.coupon_code}`",
+                    inline=True
+                )
+                
+                error_embed.add_field(
+                    name="👤 플레이어",
+                    value=f"`{player_name}`",
+                    inline=True
+                )
+                
+                # DM으로 오류 메시지 전송 시도
+                try:
+                    await interaction.user.send(embed=error_embed)
+                    
+                    await interaction.edit_original_response(
+                        embed=discord.Embed(
+                            title="❌ 처리 실패",
+                            description="쿠폰 처리에 실패했습니다.\n오류 내용을 개인 DM으로 발송했습니다.",
+                            color=0xff0000
+                        )
+                    )
+                    
+                except discord.Forbidden:
+                    # DM을 보낼 수 없는 경우 서버에서 직접 표시
+                    await interaction.edit_original_response(embed=error_embed)
+                    
+        except Exception as e:
+            logger.error(f"쿠폰 처리 중 오류: {str(e)}")
+            
+            error_embed = discord.Embed(
+                title="❌ 시스템 오류",
+                description="쿠폰 처리 중 예상치 못한 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.",
+                color=0xff0000
+            )
+            
+            try:
+                await interaction.edit_original_response(embed=error_embed)
+            except:
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 class PartyListView(ui.View):
@@ -3001,6 +3169,43 @@ class SaveCodeBot:
                 logger.error(f"세이브 UI 명령어 처리 중 오류: {e}")
                 await ctx.send(f"❌ 세이브 UI 명령어 처리 중 오류 발생: {e}")
         
+        @self.bot.command(name='쿠폰', help='쿠폰을 사용하여 골드와 나무를 받습니다.')
+        async def coupon_command(ctx: commands.Context):
+            """쿠폰 사용 UI 명령어"""
+            try:
+                # 안내 메시지와 함께 모달 열기 버튼 제공
+                embed = discord.Embed(
+                    title="🎫 쿠폰 사용하기",
+                    description="쿠폰 코드를 입력하여 골드와 나무를 받아보세요!\n버튼을 클릭하여 쿠폰 입력 폼을 열어보세요.",
+                    color=0xf39c12
+                )
+                
+                embed.add_field(
+                    name="📋 입력할 정보",
+                    value="• 쿠폰 코드\n• 플레이어 이름\n• 현재 세이브코드",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="💡 안내",
+                    value="• 처리 결과는 개인 DM으로 발송됩니다\n• 세이브코드는 MasinSaveV2_ 형식 또는 원본 게임 형식 모두 지원\n• 한 번 사용된 쿠폰은 다시 사용할 수 없습니다",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="🔒 개인정보 보호",
+                    value="입력하신 정보는 쿠폰 처리에만 사용되며 저장되지 않습니다.",
+                    inline=False
+                )
+                
+                # 쿠폰 UI 버튼 뷰 생성
+                view = CouponUIView()
+                await ctx.send(embed=embed, view=view)
+                
+            except Exception as e:
+                logger.error(f"쿠폰 UI 명령어 처리 중 오류: {e}")
+                await ctx.send(f"❌ 쿠폰 UI 명령어 처리 중 오류 발생: {e}")
+        
         # 기존 명령어들은 주석 처리 (현재는 버튼 기반 시스템 사용)
         # @self.bot.command(name='대기', help='레이드 대기 목록에 등록합니다')
         # async def raid_wait_command(ctx: commands.Context):
@@ -3406,6 +3611,19 @@ class SaveCodeCreationModal(ui.Modal, title='🔮 세이브코드 생성'):
                 color=0xff0000
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class CouponUIView(ui.View):
+    """쿠폰 사용 UI 버튼 뷰"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @ui.button(label="🎫 쿠폰 사용하기", style=discord.ButtonStyle.secondary, emoji="🎫")
+    async def open_coupon_modal(self, interaction: discord.Interaction, button: ui.Button):
+        """쿠폰 처리 모달 열기"""
+        modal = CouponProcessModal(None)  # bot_instance는 Modal에서 사용하지 않으므로 None
+        await interaction.response.send_modal(modal)
 
 
 if __name__ == "__main__":
