@@ -64,6 +64,27 @@ class CouponUseResponse:
 
 
 @dataclass
+class CouponCreateResponse:
+    """쿠폰 생성 API 응답 데이터 클래스"""
+    is_success: bool
+    coupon_code: str
+    lumber: int
+    gold: int
+    error_message: str
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'CouponCreateResponse':
+        """딕셔너리에서 CouponCreateResponse 객체 생성"""
+        return cls(
+            is_success=data.get('isSuccess', False),
+            coupon_code=data.get('couponCode', ''),
+            lumber=data.get('lumber', 0),
+            gold=data.get('gold', 0),
+            error_message=data.get('errorMessage', '')
+        )
+
+
+@dataclass
 class CouponProcessResult:
     """쿠폰 처리 결과"""
     success: bool
@@ -88,6 +109,7 @@ class CouponProcessor:
         self.base_url = base_url.rstrip('/')
         self.check_endpoint = f"{self.base_url}/api/coupon/check"
         self.use_endpoint = f"{self.base_url}/api/coupon/use"
+        self.create_endpoint = f"{self.base_url}/api/coupon/create"
         self.timeout = 10
         
         # 세션 생성
@@ -279,6 +301,99 @@ class CouponProcessor:
                 error_message=error_msg
             )
     
+    def create_coupon(self, lumber: int, gold: int) -> Tuple[bool, CouponCreateResponse]:
+        """
+        쿠폰 생성 API 호출
+        
+        Args:
+            lumber: 나무 수량
+            gold: 골드 수량
+            
+        Returns:
+            Tuple[bool, CouponCreateResponse]: (API 호출 성공 여부, 응답 데이터)
+        """
+        try:
+            # 요청 데이터 준비
+            payload = {
+                "lumber": lumber,
+                "gold": gold
+            }
+            
+            logger.info(f"쿠폰 생성 요청: lumber={lumber:,}, gold={gold:,}")
+            
+            # API 호출
+            response = self.session.post(
+                self.create_endpoint,
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            # HTTP 상태 코드 확인
+            response.raise_for_status()
+            
+            # JSON 응답 파싱
+            response_data = response.json()
+            create_response = CouponCreateResponse.from_dict(response_data)
+            
+            logger.info(f"쿠폰 생성 응답: {create_response}")
+            
+            return True, create_response
+            
+        except requests.exceptions.Timeout:
+            error_msg = "쿠폰 생성 API 요청 시간 초과"
+            logger.error(error_msg)
+            return False, CouponCreateResponse(
+                is_success=False,
+                coupon_code="",
+                lumber=lumber,
+                gold=gold,
+                error_message=error_msg
+            )
+            
+        except requests.exceptions.ConnectionError:
+            error_msg = "쿠폰 생성 API 서버에 연결할 수 없습니다"
+            logger.error(error_msg)
+            return False, CouponCreateResponse(
+                is_success=False,
+                coupon_code="",
+                lumber=lumber,
+                gold=gold,
+                error_message=error_msg
+            )
+            
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"쿠폰 생성 HTTP 오류: {e.response.status_code}"
+            logger.error(error_msg)
+            return False, CouponCreateResponse(
+                is_success=False,
+                coupon_code="",
+                lumber=lumber,
+                gold=gold,
+                error_message=error_msg
+            )
+            
+        except json.JSONDecodeError:
+            error_msg = "쿠폰 생성 API 응답을 파싱할 수 없습니다"
+            logger.error(error_msg)
+            return False, CouponCreateResponse(
+                is_success=False,
+                coupon_code="",
+                lumber=lumber,
+                gold=gold,
+                error_message=error_msg
+            )
+            
+        except Exception as e:
+            error_msg = f"쿠폰 생성 예상치 못한 오류: {str(e)}"
+            logger.error(error_msg)
+            return False, CouponCreateResponse(
+                is_success=False,
+                coupon_code="",
+                lumber=lumber,
+                gold=gold,
+                error_message=error_msg
+            )
+    
     def process_coupon_with_savecode(self, coupon_code: str, savecode: str, player_name: str = None) -> CouponProcessResult:
         """
         쿠폰 체크 -> 세이브코드 수정 -> 성공시 쿠폰 사용 처리 전체 워크플로우
@@ -443,6 +558,53 @@ def process_coupon_simple(coupon_code: str, savecode: str, player_name: str = No
         return processor.process_coupon_with_savecode(coupon_code, savecode, player_name)
     finally:
         processor.close()
+
+
+def create_coupon_simple(lumber: int, gold: int) -> Tuple[bool, CouponCreateResponse]:
+    """
+    쿠폰 생성 간편 함수
+    
+    Args:
+        lumber: 나무 수량
+        gold: 골드 수량
+        
+    Returns:
+        Tuple[bool, CouponCreateResponse]: (성공 여부, 응답 데이터)
+    """
+    processor = CouponProcessor()
+    try:
+        return processor.create_coupon(lumber, gold)
+    finally:
+        processor.close()
+
+
+def format_coupon_create_result(success: bool, response: CouponCreateResponse) -> str:
+    """
+    쿠폰 생성 결과를 사용자 친화적 문자열로 포맷팅
+    
+    Args:
+        success: API 호출 성공 여부
+        response: 쿠폰 생성 응답 데이터
+        
+    Returns:
+        str: 포맷된 문자열
+    """
+    if success and response.is_success:
+        return (
+            f"🎉 쿠폰 생성 성공!\n"
+            f"🎫 쿠폰 코드: `{response.coupon_code}`\n"
+            f"💰 골드: {response.gold:,}\n"
+            f"🌲 나무: {response.lumber:,}\n"
+            f"💬 {response.error_message}\n\n"
+            f"📋 사용법: `/쿠폰` 명령어로 이 코드를 사용할 수 있습니다!"
+        )
+    else:
+        return (
+            f"❌ 쿠폰 생성 실패\n"
+            f"💰 요청 골드: {response.gold:,}\n"
+            f"🌲 요청 나무: {response.lumber:,}\n"
+            f"💬 {response.error_message}"
+        )
 
 
 def format_coupon_result(result: CouponProcessResult) -> str:

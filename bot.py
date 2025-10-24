@@ -11,7 +11,9 @@ from discord.ext import commands
 
 # 로컬 모듈 임포트
 from config import Config
-from coupon_integrated import format_coupon_result, process_coupon_simple
+from coupon_integrated import (create_coupon_simple,
+                               format_coupon_create_result,
+                               format_coupon_result, process_coupon_simple)
 from decoder import SaveCodeDecoder
 from encoder import SaveCodeEncoder, create_custom_savecode
 from item_searcher import ItemSearcher
@@ -445,6 +447,155 @@ class CouponProcessModal(ui.Modal, title='🎫 쿠폰 사용하기'):
             error_embed = discord.Embed(
                 title="❌ 시스템 오류",
                 description="쿠폰 처리 중 예상치 못한 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.",
+                color=0xff0000
+            )
+            
+            try:
+                await interaction.edit_original_response(embed=error_embed)
+            except:
+                await interaction.followup.send(embed=error_embed, ephemeral=True)
+
+
+class CouponCreateModal(ui.Modal, title='🎫 쿠폰 생성하기'):
+    """쿠폰 생성을 위한 모달"""
+    
+    def __init__(self):
+        super().__init__()
+    
+    lumber = ui.TextInput(
+        label='나무 수량',
+        placeholder='나무 수량을 입력하세요 (예: 100000)',
+        style=discord.TextStyle.short,
+        max_length=10,
+        required=True
+    )
+    
+    gold = ui.TextInput(
+        label='골드 수량',
+        placeholder='골드 수량을 입력하세요 (예: 500000)',
+        style=discord.TextStyle.short,
+        max_length=10,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """모달 제출 시 쿠폰 생성"""
+        try:
+            # 즉시 응답하여 타임아웃 방지
+            await interaction.response.defer(ephemeral=True)
+            
+            # 입력값 검증
+            lumber_value = self.lumber.value.strip()
+            gold_value = self.gold.value.strip()
+            
+            if not lumber_value or not gold_value:
+                await interaction.followup.send(
+                    "❌ 나무와 골드 수량을 모두 입력해주세요.",
+                    ephemeral=True
+                )
+                return
+            
+            try:
+                lumber_int = int(lumber_value)
+                gold_int = int(gold_value)
+            except ValueError:
+                await interaction.followup.send(
+                    "❌ 나무와 골드는 숫자로 입력해주세요.",
+                    ephemeral=True
+                )
+                return
+            
+            if lumber_int < 0 or gold_int < 0:
+                await interaction.followup.send(
+                    "❌ 나무와 골드는 0 이상의 값이어야 합니다.",
+                    ephemeral=True
+                )
+                return
+            
+            if lumber_int > 99999999 or gold_int > 99999999:
+                await interaction.followup.send(
+                    "❌ 나무와 골드는 99,999,999 이하의 값이어야 합니다.",
+                    ephemeral=True
+                )
+                return
+            
+            # 처리 시작 메시지
+            processing_embed = discord.Embed(
+                title="🔄 쿠폰 생성 중...",
+                description="쿠폰을 생성하고 있습니다. 잠시만 기다려주세요.",
+                color=0xffff00
+            )
+            await interaction.followup.send(embed=processing_embed, ephemeral=True)
+            
+            # 쿠폰 생성 실행
+            success, response = create_coupon_simple(lumber_int, gold_int)
+            
+            # 결과 처리
+            if success and response.is_success:
+                # 성공 시 DM으로 결과 전송
+                success_embed = discord.Embed(
+                    title="🎉 쿠폰 생성 성공!",
+                    color=0x00ff00
+                )
+                
+                success_embed.add_field(
+                    name="🎫 생성된 쿠폰 코드",
+                    value=f"```{response.coupon_code}```",
+                    inline=False
+                )
+                
+                success_embed.add_field(
+                    name="💰 쿠폰 내용",
+                    value=f"골드: {response.gold:,}\n나무: {response.lumber:,}",
+                    inline=True
+                )
+                
+                success_embed.add_field(
+                    name="💡 사용 방법",
+                    value="/쿠폰 명령어로 이 코드를 사용할 수 있습니다!",
+                    inline=True
+                )
+                
+                success_embed.set_footer(text=f"생성 시간: {discord.utils.format_dt(discord.utils.utcnow(), style='F')}")
+                
+                try:
+                    await interaction.user.send(embed=success_embed)
+                    
+                    # 서버에서는 DM 전송 완료 메시지
+                    await interaction.edit_original_response(
+                        embed=discord.Embed(
+                            title="✅ 쿠폰 생성 완료",
+                            description=f"쿠폰이 성공적으로 생성되었습니다!\n쿠폰 코드를 개인 DM으로 발송했습니다.",
+                            color=0x00ff00
+                        )
+                    )
+                    
+                except discord.Forbidden:
+                    # DM을 보낼 수 없는 경우 서버에서 직접 표시
+                    await interaction.edit_original_response(embed=success_embed)
+                    
+            else:
+                # 실패 시 오류 메시지
+                error_embed = discord.Embed(
+                    title="❌ 쿠폰 생성 실패",
+                    description=response.error_message,
+                    color=0xff0000
+                )
+                
+                error_embed.add_field(
+                    name="💰 요청한 내용",
+                    value=f"골드: {gold_int:,}\n나무: {lumber_int:,}",
+                    inline=True
+                )
+                
+                await interaction.edit_original_response(embed=error_embed)
+                    
+        except Exception as e:
+            logger.error(f"쿠폰 생성 중 오류: {str(e)}")
+            
+            error_embed = discord.Embed(
+                title="❌ 시스템 오류",
+                description="쿠폰 생성 중 예상치 못한 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.",
                 color=0xff0000
             )
             
@@ -3206,6 +3357,53 @@ class SaveCodeBot:
                 logger.error(f"쿠폰 UI 명령어 처리 중 오류: {e}")
                 await ctx.send(f"❌ 쿠폰 UI 명령어 처리 중 오류 발생: {e}")
         
+        @self.bot.command(name='쿠폰생성', help='새로운 쿠폰을 생성합니다. (관리자 전용)')
+        async def coupon_create_command(ctx: commands.Context):
+            """쿠폰 생성 UI 명령어 (관리자 전용)"""
+            try:
+                # 관리자 권한 확인
+                if not ctx.author.guild_permissions.administrator:
+                    embed = discord.Embed(
+                        title="❌ 권한 없음",
+                        description="쿠폰 생성은 서버 관리자만 사용할 수 있습니다.",
+                        color=0xff0000
+                    )
+                    await ctx.send(embed=embed)
+                    return
+                
+                # 안내 메시지와 함께 모달 열기 버튼 제공
+                embed = discord.Embed(
+                    title="🎫 쿠폰 생성하기",
+                    description="새로운 쿠폰을 생성하여 사용자들에게 골드와 나무를 지급하세요!\n버튼을 클릭하여 쿠폰 생성 폼을 열어보세요.",
+                    color=0xe74c3c
+                )
+                
+                embed.add_field(
+                    name="📋 입력할 정보",
+                    value="• 나무 수량\n• 골드 수량",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="💡 안내",
+                    value="• 생성된 쿠폰 코드는 개인 DM으로 발송됩니다\n• 쿠폰 코드는 10자리 랜덤 문자열로 생성됩니다\n• 생성된 쿠폰은 `/쿠폰` 명령어로 사용할 수 있습니다",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="⚠️ 주의사항",
+                    value="• 0 이상 99,999,999 이하의 값만 입력 가능합니다\n• 생성된 쿠폰은 한 번만 사용할 수 있습니다",
+                    inline=False
+                )
+                
+                # 쿠폰 생성 UI 버튼 뷰 생성
+                view = CouponCreateUIView()
+                await ctx.send(embed=embed, view=view)
+                
+            except Exception as e:
+                logger.error(f"쿠폰 생성 UI 명령어 처리 중 오류: {e}")
+                await ctx.send(f"❌ 쿠폰 생성 UI 명령어 처리 중 오류 발생: {e}")
+        
         # 기존 명령어들은 주석 처리 (현재는 버튼 기반 시스템 사용)
         # @self.bot.command(name='대기', help='레이드 대기 목록에 등록합니다')
         # async def raid_wait_command(ctx: commands.Context):
@@ -3623,6 +3821,27 @@ class CouponUIView(ui.View):
     async def open_coupon_modal(self, interaction: discord.Interaction, button: ui.Button):
         """쿠폰 처리 모달 열기"""
         modal = CouponProcessModal(None)  # bot_instance는 Modal에서 사용하지 않으므로 None
+        await interaction.response.send_modal(modal)
+
+
+class CouponCreateUIView(ui.View):
+    """쿠폰 생성 UI 버튼 뷰"""
+    
+    def __init__(self):
+        super().__init__(timeout=300)
+    
+    @ui.button(label="🎫 쿠폰 생성하기", style=discord.ButtonStyle.danger, emoji="🎫")
+    async def open_coupon_create_modal(self, interaction: discord.Interaction, button: ui.Button):
+        """쿠폰 생성 모달 열기"""
+        # 관리자 권한 재확인
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ 쿠폰 생성은 서버 관리자만 사용할 수 있습니다.",
+                ephemeral=True
+            )
+            return
+            
+        modal = CouponCreateModal()
         await interaction.response.send_modal(modal)
 
 
