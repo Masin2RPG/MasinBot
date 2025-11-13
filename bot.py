@@ -16,6 +16,7 @@ from coupon_integrated import (create_coupon_simple,
                                format_coupon_result, process_coupon_simple)
 from decoder import SaveCodeDecoder
 from encoder import SaveCodeEncoder, create_custom_savecode
+from graduation_checker import GraduationChecker
 from item_searcher import ItemSearcher
 from items import ItemDatabase
 from raid_system import RaidWaitingSystem
@@ -2007,6 +2008,7 @@ class SaveCodeBot:
         self.encoder = SaveCodeEncoder()  # 세이브코드 인코더 초기화
         self.item_searcher = ItemSearcher()  # 아이템 검색기 초기화
         self.item_db = ItemDatabase()  # 아이템 데이터베이스 초기화
+        self.graduation_checker = GraduationChecker()  # 졸업 조건 확인기 초기화
 
         self.raid_system = RaidWaitingSystem()  # 레이드 대기 시스템 초기화
         self.savecode_manager = SaveCodeManager()  # 세이브코드 관리자 초기화
@@ -2295,6 +2297,8 @@ class SaveCodeBot:
                 character_counts = {}  # 캐릭터별 출현 횟수 추적
                 apocalypse_characters = set()  # 묵시록 레이드 졸업 캐릭터 (죄: 아이템 보유)
                 uriel_characters = set()  # 우리엘 졸업 캐릭터
+                raphael_characters = set()  # 라파엘 졸업 캐릭터
+                gabriel_characters = set()  # 가브리엘 졸업 캐릭터
                 
                 for code in codes:
                     print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
@@ -2341,37 +2345,17 @@ class SaveCodeBot:
                         items_list = self.decoder.extract_items(code)
                         response = "\n".join(items_list)
                         
-                        # 우리엘 졸업 아이템 확인 (ID: 264, 266, 268, 270, 272, 274)
-                        uriel_item_ids = set()
-                        for item in items_list:
-                            if "거대한 죄의 십자가" in item:  # ID 264
-                                uriel_item_ids.add(264)
-                            elif "영혼을 짓이기는 월계관" in item:  # ID 266
-                                uriel_item_ids.add(266)
-                            elif "멸망을 부르는 피의 잔" in item:  # ID 268
-                                uriel_item_ids.add(268)
-                            elif "심판하는자의 강인한 영혼" in item:  # ID 270
-                                uriel_item_ids.add(270)
-                            elif "심판하는자의 강력한 영혼" in item:  # ID 272
-                                uriel_item_ids.add(272)
-                            elif "심판하는자의 전능한 영혼" in item:  # ID 274
-                                uriel_item_ids.add(274)
+                        # 졸업 상태 확인 (새로운 GraduationChecker 사용)
+                        graduation_status = self.graduation_checker.get_graduation_status(items_list)
                         
-                        # 우리엘 졸업 조건: 3개 쌍 중 하나라도 만족하면 됨
-                        # [264,270], [266,272], [268,274] 중 하나의 쌍이라도 모두 있으면 우리엘 졸업
-                        is_uriel_graduate = (
-                            (264 in uriel_item_ids and 270 in uriel_item_ids) or
-                            (266 in uriel_item_ids and 272 in uriel_item_ids) or
-                            (268 in uriel_item_ids and 274 in uriel_item_ids)
-                        )
-                        
-                        # 묵시록 레이드 아이템 확인 (죄: 가 포함된 아이템, 단 우리엘 졸업자는 제외)
-                        has_apocalypse_item = any("죄:" in item for item in items_list)
-                        
-                        if is_uriel_graduate:
+                        # 졸업 상태에 따라 캐릭터를 해당 카테고리에 추가
+                        if graduation_status == 'raphael':
+                            raphael_characters.add(hero_name)
+                        elif graduation_status == 'gabriel':
+                            gabriel_characters.add(hero_name)
+                        elif graduation_status == 'uriel':
                             uriel_characters.add(hero_name)
-                        elif has_apocalypse_item:
-                            # 우리엘 졸업이 아닌 경우에만 묵시록 졸업으로 카운트
+                        elif graduation_status == 'apocalypse':
                             apocalypse_characters.add(hero_name)
                         
                         # 결과 전송 - Embed 사용
@@ -2478,6 +2462,16 @@ class SaveCodeBot:
                         value=f"{len(uriel_characters)}건", 
                         inline=True
                     )
+                    stats_embed.add_field(
+                        name="🕊️ 라파엘 졸업", 
+                        value=f"{len(raphael_characters)}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
+                        name="⚔️ 가브리엘 졸업", 
+                        value=f"{len(gabriel_characters)}건", 
+                        inline=True
+                    )
                     
                     # 발견된 캐릭터 목록 추가
                     if characters:
@@ -2546,6 +2540,42 @@ class SaveCodeBot:
                         stats_embed.add_field(
                             name="👼 우리엘 졸업 캐릭터",
                             value="우리엘 졸업 아이템 쌍을 보유한 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 라파엘 졸업 캐릭터 목록 추가
+                    if raphael_characters:
+                        raphael_list = ", ".join(sorted(raphael_characters))
+                        if len(raphael_list) > 1024:  # Discord 필드 제한
+                            raphael_list = raphael_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="🕊️ 라파엘 졸업 캐릭터",
+                            value=raphael_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="🕊️ 라파엘 졸업 캐릭터",
+                            value="라파엘 졸업 아이템 쌍을 보유한 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 가브리엘 졸업 캐릭터 목록 추가
+                    if gabriel_characters:
+                        gabriel_list = ", ".join(sorted(gabriel_characters))
+                        if len(gabriel_list) > 1024:  # Discord 필드 제한
+                            gabriel_list = gabriel_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="⚔️ 가브리엘 졸업 캐릭터",
+                            value=gabriel_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="⚔️ 가브리엘 졸업 캐릭터",
+                            value="가브리엘 졸업 아이템 쌍을 보유한 캐릭터가 없습니다",
                             inline=False
                         )
                     
