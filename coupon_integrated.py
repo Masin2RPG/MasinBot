@@ -453,6 +453,10 @@ class CouponProcessor:
                 # 나무만 추가
                 original_data = self.modifier.parse_masin_savecode(savecode)
                 new_lumber = original_data['lumber'] + check_response.lumber
+                # 나무 최대값 제한 (990000)
+                if new_lumber > 990000:
+                    new_lumber = 990000
+                    logger.warning(f"나무 값이 990000을 초과하여 990000으로 제한됨")
                 modified_savecode = self.modifier.modify_lumber(savecode, new_lumber)
                 
             else:
@@ -472,6 +476,11 @@ class CouponProcessor:
                 original_data = self.modifier.parse_original_savecode(savecode)
                 new_gold = original_data['gold'] + check_response.gold
                 new_lumber = original_data['lumber'] + check_response.lumber
+                
+                # 나무 최대값 제한 (990000)
+                if new_lumber > 990000:
+                    new_lumber = 990000
+                    logger.warning(f"나무 값이 990000을 초과하여 990000으로 제한됨")
                 
                 # 골드와 나무 모두 수정
                 modified_savecode = self.modifier.modify_resources(
