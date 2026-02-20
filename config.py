@@ -51,12 +51,13 @@ class PermissionSettings:
 @dataclass
 class GameSettings:
     """게임 관련 설정"""
-    version: int = 7
+    version: int = 10
     udg_save_value_length: list = None
     item_slots: list = None
     char_map_play_true: str = "1O7EC43VPRN8FXKDTSUQ026HWA5YIM9BJLGZ"
     char_map_play_false: str = "OBX6RAGZKT71N435YDEVPF92LUWQ0IMSCHJ8"
     string_source: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890~`!#$^&*()-_=+|{}[]:;<>,.?@"
+    summon_chunk_n: int = 0  # 0이면 코드 길이로 자동 감지
     
     def __post_init__(self):
         if self.udg_save_value_length is None:
@@ -65,6 +66,10 @@ class GameSettings:
         if self.item_slots is None:
             # 원본 게임과 동일한 아이템 슬롯 위치
             self.item_slots = [2, 4, 6, 8, 10, 12]
+
+        # 소환 비트 청크 개수 (버전 10에서 추가된 확장 데이터)
+        if self.summon_chunk_n < 0:
+            self.summon_chunk_n = 0
 
 
 @dataclass
@@ -130,7 +135,8 @@ class ConfigManager:
     def _load_game_settings(self) -> GameSettings:
         """게임 설정 로드"""
         return GameSettings(
-            version=int(os.getenv('GAME_VERSION', '7'))
+            version=int(os.getenv('GAME_VERSION', '10')),
+            summon_chunk_n=int(os.getenv('SUMMON_CHUNK_N', '0'))
         )
     
     def _load_optimization_settings(self) -> OptimizationSettings:
@@ -189,6 +195,7 @@ class Config:
         self.CHAR_MAP_PLAY_TRUE = self._manager.game.char_map_play_true
         self.CHAR_MAP_PLAY_FALSE = self._manager.game.char_map_play_false
         self.STRING_SOURCE = self._manager.game.string_source
+        self.SUMMON_CHUNK_N = self._manager.game.summon_chunk_n
         self.LOG_LEVEL = self._manager.bot.log_level
         self.LOG_FORMAT = self._manager.bot.log_format
         

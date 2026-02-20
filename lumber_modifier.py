@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from decoder import SaveCodeDecoder
 from encoder import SaveCodeEncoder
+from savecode_decoder import parse_savecode
 
 
 class LumberModifier:
@@ -93,33 +94,31 @@ class LumberModifier:
         """
         원본 게임 세이브코드를 파싱하여 구조화된 데이터로 변환
         """
-        # SaveCodeDecoder로 디코딩
-        decoded_data = self.decoder.decode_savecode(savecode)
-        
-        # 스케일 팩터 (나무는 100배로 저장됨)
-        lumber_scale_factor = 100
-        
-        # 디코딩된 데이터를 구조화 (savecode_decoder.py 기준)
+        parsed = parse_savecode(
+            savecode,
+            summon_chunk_n=getattr(self.decoder.config, "SUMMON_CHUNK_N", 0)
+        )
+
+        decoded_data = parsed.get('raw_data', [])
         data = {
             'raw_data': decoded_data,
-            'gold': decoded_data[1] * lumber_scale_factor,  # 골드 - load[1] * 100
-            'lumber': decoded_data[15] * lumber_scale_factor,  # 나무 - load[15] * 100
-            'character_id': decoded_data[14],  # 캐릭터 타입 ID - load[14]  
-            'level': decoded_data[13],  # 레벨 - load[13]
-            'exp': decoded_data[11],  # 경험치 - load[11]
-            'strength': decoded_data[3],  # 힘 스탯 - load[3]
-            'agility': decoded_data[5],  # 민첩 스탯 - load[5]
-            'intelligence': decoded_data[7],  # 지능 스탯 - load[7]
+            'gold': parsed.get('gold', 0),
+            'lumber': parsed.get('lumber', 0),
+            'character_id': parsed.get('hero_type_index', 0),
+            'level': parsed.get('level', 0),
+            'exp': parsed.get('exp_compact', 0),
+            'strength': decoded_data[3] if len(decoded_data) > 3 else 0,
+            'agility': decoded_data[5] if len(decoded_data) > 5 else 0,
+            'intelligence': decoded_data[7] if len(decoded_data) > 7 else 0,
             'items': []
         }
-        
-        # 아이템 슬롯 파싱 (ITEM_SLOTS = [2, 4, 6, 8, 10, 12])
+
         item_slots = self.decoder.config.ITEM_SLOTS
         for slot in item_slots:
             if slot < len(decoded_data):
                 item_id = decoded_data[slot]
                 data['items'].append(item_id)
-        
+
         return data
     
     def create_original_savecode(self, data: dict, player_name: str) -> str:

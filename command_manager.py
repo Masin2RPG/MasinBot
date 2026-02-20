@@ -36,8 +36,8 @@ class SaveCodeCommands:
             
             try:
                 # SaveCodeManager를 통한 검증
-                decoded_data = self.savecode_manager.decode_savecode(code)
-                is_valid = decoded_data is not None
+                decoded_data = self.savecode_manager.decode_savecode(code, name)
+                is_valid = bool(decoded_data)
                 
                 result = "✅ 유효함" if is_valid else "❌ 유효하지 않음"
                 await ctx.send(f"검증 결과: {result}")

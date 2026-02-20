@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from config import Config
 from items import ItemDatabase
+from savecode_decoder import parse_savecode
 
 logger = logging.getLogger(__name__)
 
@@ -89,96 +90,42 @@ class SaveCodeDecoder:
                 
         return result
     
-    def decode_savecode(self, code: str, use_play_type: bool = True) -> List[int]:
+    def _parse(self, code: str, player_name: str = "", use_play_type: bool = True, validate_checksum: bool = False) -> dict:
+        """공통 파서 래퍼"""
+        return parse_savecode(
+            code=code,
+            player_name=player_name,
+            play_type=use_play_type,
+            save_value_length=self.config.UDG_SAVE_VALUE_LENGTH,
+            summon_chunk_n=getattr(self.config, "SUMMON_CHUNK_N", None),
+            validate_checksum=validate_checksum,
+        )
+
+    def decode_savecode(self, code: str, player_name: str = "", use_play_type: bool = True) -> List[int]:
         """세이브코드를 디코드하여 로드 데이터 반환"""
-        # 코드 전처리
-        clean_code = code.replace("-", "").upper().strip()
-        
-        # 코드 길이 검증
-        if len(clean_code) % 2 != 0:
-            raise ValueError(f"코드 길이가 올바르지 않습니다 (홀수): {len(clean_code)}")
-        
-        if len(clean_code) == 0:
-            raise ValueError("코드가 비어있습니다")
-        
-        # 2글자씩 처리하여 숫자 문자열 생성
-        numeric_string = ""
-        for i in range(0, len(clean_code), 2):
-            pair = clean_code[i:i+2]
-            value = self._convert_code_to_int(pair, use_play_type)
-            numeric_string += f"{value:03d}"
-        
-        # 세이브 값 길이에 따라 분할 (원본 게임과 동일하게 16개 배열)
-        load_data = [0] * len(self.config.UDG_SAVE_VALUE_LENGTH)  # 16개 배열로 초기화
-        position = 0
-        save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
-        
-        for i in range(1, save_size + 1):  # 1부터 15까지
-            length = self.config.UDG_SAVE_VALUE_LENGTH[i]
-            if position + length > len(numeric_string):
-                # 데이터가 부족한 경우 0으로 채움
-                load_data[i] = 0
-            else:
-                chunk = numeric_string[position:position + length]
-                load_data[i] = int(chunk) if chunk else 0
-            position += length
-        
-        return load_data
+        parsed = self._parse(code, player_name=player_name, use_play_type=use_play_type, validate_checksum=False)
+        return parsed.get("raw_data", [])
     
-    def validate_savecode(self, code: str, player_name: str) -> bool:
+    def validate_savecode(self, code: str, player_name: str, use_play_type: bool = True) -> bool:
         """세이브코드 유효성 검증"""
         try:
-            load_data = self.decode_savecode(code)
-            
-            if len(load_data) < 10:  # 최소 인덱스 9까지 필요
-                logger.error("로드 데이터가 충분하지 않습니다")
-                return False
-            
-            # 체크섬 계산 (원본 게임과 동일하게)
-            checksum = 0
-            save_size = len(self.config.UDG_SAVE_VALUE_LENGTH) - 1  # 인덱스 0은 사용하지 않으므로 -1
-            for i in range(1, save_size + 1):  # 1부터 15까지
-                if i != 9:  # 9번째 인덱스(체크섬)는 제외
-                    checksum += load_data[i] * i
-            
-            # 게임 버전 보정
-            if self.config.GAME_VERSION > 99:
-                checksum += self.config.GAME_VERSION % ord('d')
-            else:
-                checksum += self.config.GAME_VERSION
-            
-            # 플레이어 이름 기반 가산
-            name_value = self._calculate_string_value(player_name)
-            checksum += name_value
-            
-            # 체크섬 정규화 (원본 게임은 [9] 사용)
-            checksum %= self._get_nine_power(self.config.UDG_SAVE_VALUE_LENGTH[9])
-            
-            # 검증 결과 반환
-            is_valid = checksum == load_data[9]
-            logger.info(f"세이브코드 검증: {'성공' if is_valid else '실패'}")
-            return is_valid
-            
+            parsed = self._parse(code, player_name=player_name, use_play_type=use_play_type, validate_checksum=True)
+            return bool(parsed.get("checksum_valid", False))
         except Exception as e:
             logger.error(f"세이브코드 검증 중 오류: {e}")
             return False
     
-    def extract_items(self, code: str) -> List[str]:
+    def extract_items(self, code: str, use_play_type: bool = True) -> List[str]:
         """세이브코드에서 아이템 목록 추출"""
         try:
-            load_data = self.decode_savecode(code)
+            parsed = self._parse(code, use_play_type=use_play_type)
             items_list = []
-            
-            for idx, slot_index in enumerate(self.config.ITEM_SLOTS, 1):
-                if slot_index < len(load_data):
-                    item_code = load_data[slot_index]
-                    item_name = self.item_db.get_item_name(item_code)
-                    items_list.append(f"{idx}번째 아이템: {item_name}")
-                else:
-                    items_list.append(f"{idx}번째 아이템: 데이터 없음")
-            
+
+            for idx, item_code in enumerate(parsed.get("items", []), 1):
+                item_name = self.item_db.get_item_name(item_code)
+                items_list.append(f"{idx}번째 아이템: {item_name}")
+
             return items_list
-            
         except Exception as e:
             logger.error(f"아이템 추출 중 오류: {e}")
             raise
@@ -186,27 +133,26 @@ class SaveCodeDecoder:
     def get_load_summary(self, code: str) -> dict:
         """세이브코드의 전체 정보 요약"""
         try:
-            load_data = self.decode_savecode(code)
-            
+            parsed = self._parse(code)
+
             summary = {
-                "load_data": load_data,
-                "total_slots": len(load_data),
+                "load_data": parsed.get("raw_data", []),
+                "total_slots": len(parsed.get("raw_data", [])),
                 "items": {},
-                "checksum_slot": load_data[8] if len(load_data) > 8 else None
+                "checksum_slot": parsed.get("checksum_value"),
+                "save_version": parsed.get("save_version"),
+                "hero_type_index": parsed.get("hero_type_index"),
+                "checksum_valid": parsed.get("checksum_valid", False),
             }
-            
-            # 아이템 정보 추가
-            for idx, slot_index in enumerate(self.config.ITEM_SLOTS, 1):
-                if slot_index < len(load_data):
-                    item_code = load_data[slot_index]
-                    item_name = self.item_db.get_item_name(item_code)
-                    summary["items"][f"slot_{idx}"] = {
-                        "code": item_code,
-                        "name": item_name
-                    }
-            
+
+            for idx, item_code in enumerate(parsed.get("items", []), 1):
+                item_name = self.item_db.get_item_name(item_code)
+                summary["items"][f"slot_{idx}"] = {
+                    "code": item_code,
+                    "name": item_name,
+                }
+
             return summary
-            
         except Exception as e:
             logger.error(f"로드 요약 생성 중 오류: {e}")
             raise

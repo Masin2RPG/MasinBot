@@ -13,14 +13,20 @@ logger = logging.getLogger(__name__)
 class GraduationChecker:
     """졸업 조건 확인 클래스"""
     
-    def __init__(self, config_file: str = 'graduation_conditions.json'):
+    def __init__(
+        self,
+        config_file: str = 'graduation_conditions.json',
+        raid_items_file: str = 'raid_graduation_items.json'
+    ):
         """
         졸업 조건 확인기 초기화
         
         Args:
             config_file: 졸업 조건 JSON 파일 경로
+            raid_items_file: 레이드 졸업 아이템 JSON 파일 경로
         """
         self.conditions = self._load_conditions(config_file)
+        self.raid_items = self._load_raid_items(raid_items_file)
         
     def _load_conditions(self, filename: str) -> dict:
         """졸업 조건 JSON 파일 로드"""
@@ -30,6 +36,39 @@ class GraduationChecker:
         except Exception as e:
             logger.error(f"{filename} 파일 로드 실패: {e}")
             return {}
+
+    def _load_raid_items(self, filename: str) -> Dict[str, Dict[str, Set[int]]]:
+        """레이드 졸업 아이템 JSON 파일 로드"""
+        default_structure = {
+            'apocalypse': {'any_of': set(), 'pairs': []},
+            'raphael': {'any_of': set(), 'pairs': []},
+            'gabriel': {'any_of': set(), 'pairs': []},
+            'uriel': {'any_of': set(), 'pairs': []},
+        }
+
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.error(f"{filename} 파일 로드 실패: {e}")
+            return default_structure
+
+        normalized: Dict[str, Dict[str, Set[int]]] = {}
+        for raid_name, rule in default_structure.items():
+            rule_data = data.get(raid_name, {}) if isinstance(data, dict) else {}
+
+            any_of = rule_data.get('any_of', []) if isinstance(rule_data, dict) else []
+            pairs = rule_data.get('pairs', []) if isinstance(rule_data, dict) else []
+
+            normalized_any = {int(x) for x in any_of}
+            normalized_pairs = [tuple(int(x) for x in pair) for pair in pairs if isinstance(pair, (list, tuple))]
+
+            normalized[raid_name] = {
+                'any_of': normalized_any,
+                'pairs': normalized_pairs,
+            }
+
+        return normalized
     
     def check_uriel_graduation(self, items_list: List[str]) -> bool:
         """
@@ -168,32 +207,60 @@ class GraduationChecker:
         
         return any(keyword in item for item in items_list)
     
-    def get_graduation_status(self, items_list: List[str]) -> str:
+    def _check_raid_by_ids(self, item_ids: Set[int], raid: str) -> bool:
+        """레이드별 아이템 규칙을 ID 기반으로 확인"""
+        rules = self.raid_items.get(raid, {})
+        if not rules:
+            return False
+
+        # 쌍(모두 필요) 규칙
+        pairs = rules.get('pairs', [])
+        if pairs:
+            for pair in pairs:
+                if all(pair_item in item_ids for pair_item in pair):
+                    return True
+
+        # 단일(하나라도) 규칙
+        any_of = rules.get('any_of', set())
+        if any_of and item_ids.intersection(any_of):
+            return True
+
+        return False
+
+    def get_graduation_status(self, items_list: List[str] = None, item_ids: List[int] = None) -> str:
         """
         졸업 상태를 업그레이드 시스템을 고려해서 반환
         
         Args:
-            items_list: 아이템 목록
+            items_list: 아이템 이름 목록 (기존 문자열 기반 체크용)
+            item_ids: 아이템 코드(ID) 목록 (우선 사용)
             
         Returns:
             졸업 상태 ('raphael', 'gabriel', 'uriel', 'apocalypse', 'none')
         """
-        # 업그레이드 시스템: 더 높은 등급 졸업을 우선 확인
-        # 우선순위: 가브리엘 > 라파엘 > 우리엘 > 묵시록
-        
-        # 가브리엘 졸업 확인 (우리엘 영혼이 있어도 가브리엘 조건이면 가브리엘)
+        # ID 기반 규칙이 우선이며, 실패 시 문자열 매칭으로 폴백
+        if item_ids is not None:
+            item_id_set = set(item_ids)
+            if self._check_raid_by_ids(item_id_set, 'gabriel'):
+                return 'gabriel'
+            if self._check_raid_by_ids(item_id_set, 'raphael'):
+                return 'raphael'
+            if self._check_raid_by_ids(item_id_set, 'uriel'):
+                return 'uriel'
+            if self._check_raid_by_ids(item_id_set, 'apocalypse'):
+                return 'apocalypse'
+            return 'none'
+
+        if items_list is None:
+            return 'none'
+
+        # 문자열 기반 폴백 로직 (기존 방식 유지)
         if self.check_gabriel_graduation(items_list):
             return 'gabriel'
-            
-        # 라파엘 졸업 확인 (가브리엘, 우리엘 영혼이 있어도 라파엘 조건이면 라파엘)
         elif self.check_raphael_graduation(items_list):
             return 'raphael'
-            
-        # 우리엘 졸업 확인
         elif self.check_uriel_graduation(items_list):
             return 'uriel'
-            
-        # 묵시록 졸업 확인 (죄: 아이템만 있는 경우)
         elif self.check_apocalypse_graduation(items_list):
             return 'apocalypse'
         else:

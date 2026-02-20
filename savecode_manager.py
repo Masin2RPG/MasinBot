@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 class SaveCodeManager:
     """세이브코드 관리 및 처리 시스템"""
     
-    def __init__(self):
+    def __init__(self, summon_chunk_n: int = None):
         self.character_list = self._load_character_list()
+        self.summon_chunk_n = summon_chunk_n
     
     def _load_character_list(self) -> Dict:
         """CharList_by_id.json 파일에서 캐릭터 목록을 로드"""
@@ -33,18 +34,18 @@ class SaveCodeManager:
             logger.error(f"캐릭터 리스트 로드 중 오류: {e}")
             return {}
     
-    def decode_savecode(self, savecode: str) -> Optional[Dict]:
+    def decode_savecode(self, savecode: str, player_name: str = "") -> Optional[Dict]:
         """세이브코드를 디코딩하여 데이터 반환"""
         try:
-            return decode_savecode2(savecode)
+            return decode_savecode2(savecode, player_name, summon_chunk_n=self.summon_chunk_n)
         except Exception as e:
             logger.error(f"세이브코드 디코딩 실패: {e}")
             return None
     
-    def extract_resources(self, savecode: str) -> Optional[Dict]:
+    def extract_resources(self, savecode: str, player_name: str = "") -> Optional[Dict]:
         """세이브코드에서 골드, 목재, 영웅 정보 추출"""
         try:
-            return extract_save_data(savecode)
+            return extract_save_data(savecode, player_name, summon_chunk_n=self.summon_chunk_n)
         except Exception as e:
             logger.error(f"리소스 추출 실패: {e}")
             return None

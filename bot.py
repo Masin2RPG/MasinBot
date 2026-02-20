@@ -2011,7 +2011,8 @@ class SaveCodeBot:
         self.graduation_checker = GraduationChecker()  # 졸업 조건 확인기 초기화
 
         self.raid_system = RaidWaitingSystem()  # 레이드 대기 시스템 초기화
-        self.savecode_manager = SaveCodeManager()  # 세이브코드 관리자 초기화
+        # summon_chunk_n None이면 자동 감지
+        self.savecode_manager = SaveCodeManager(summon_chunk_n=getattr(self.config, "SUMMON_CHUNK_N", None))
 
         
         # 봇 인텐트 설정
@@ -2077,8 +2078,8 @@ class SaveCodeBot:
         if lumber < 0:
             return "나무는 0 이상의 값이어야 합니다."
         
-        if character_id < 0 or character_id > 100:
-            return "캐릭터 ID는 0~100 사이의 값이어야 합니다."
+        if character_id < 0:
+            return "캐릭터 ID는 0 이상의 값이어야 합니다."
         
         if level < 1 or level > 2000:
             return "캐릭터 레벨은 1~2000 사이의 값이어야 합니다."
@@ -2138,9 +2139,11 @@ class SaveCodeBot:
                     load_data[item_slots[i]] = item_id
             
             # 세이브코드 생성
-            savecode = self.encoder.encode_savecode(load_data, player_name)
+            savecode = self.encoder.encode_savecode(load_data, player_name, summon_chunk_n=0)
+            # 하이픈 포맷(5글자 단위)으로 표시용 변환
+            display_code = "-".join([savecode[i:i+5] for i in range(0, len(savecode), 5)])
             
-            # 검증
+            # 검증 (하이픈 유무 무관)
             is_valid = self.decoder.validate_savecode(savecode, player_name)
             
             embed = discord.Embed(
@@ -2151,7 +2154,7 @@ class SaveCodeBot:
             
             embed.add_field(
                 name="🔮 생성된 세이브코드",
-                value=f"```{savecode}```",
+                value=f"```{display_code}```",
                 inline=False
             )
             
@@ -2243,7 +2246,7 @@ class SaveCodeBot:
             
             try:
                 # 기존 함수와 새 함수 둘 다 사용
-                is_valid_legacy = decode_savecode2(code, name)
+                is_valid_legacy = decode_savecode2(code, name, summon_chunk_n=self.config.SUMMON_CHUNK_N)
                 is_valid_new = self.decoder.validate_savecode(code, name)
                 
                 # 결과가 다르면 로그에 기록
@@ -2304,7 +2307,7 @@ class SaveCodeBot:
                     print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
                     try:
                         # 검증
-                        is_valid = decode_savecode2(code, name)
+                        is_valid = decode_savecode2(code, name, summon_chunk_n=self.config.SUMMON_CHUNK_N)
                         result = "✅ 유효함" if is_valid else "❌ 유효하지 않음"
                         
                         # 통계 업데이트
@@ -2314,7 +2317,7 @@ class SaveCodeBot:
                             invalid_count += 1
                         
                         # 세이브 데이터 추출
-                        save_data = extract_save_data(code, name)
+                        save_data = extract_save_data(code, name, summon_chunk_n=self.config.SUMMON_CHUNK_N)
                         
                         # 디버깅을 위한 타입 확인
                         print(f"[DEBUG] save_data type: {type(save_data)}")
@@ -2343,10 +2346,14 @@ class SaveCodeBot:
                         
                         # 아이템 추출
                         items_list = self.decoder.extract_items(code)
+                        item_ids = save_data.get('items', []) if isinstance(save_data, dict) else []
                         response = "\n".join(items_list)
                         
-                        # 졸업 상태 확인 (새로운 GraduationChecker 사용)
-                        graduation_status = self.graduation_checker.get_graduation_status(items_list)
+                        # 졸업 상태 확인 (레이드 아이템 JSON 기반)
+                        graduation_status = self.graduation_checker.get_graduation_status(
+                            items_list=items_list,
+                            item_ids=item_ids
+                        )
                         
                         # 졸업 상태에 따라 캐릭터를 해당 카테고리에 추가
                         if graduation_status == 'raphael':
@@ -3040,8 +3047,8 @@ class SaveCodeBot:
                     await ctx.send("❌ 나무는 0 이상의 값이어야 합니다.")
                     return
                 
-                if character_id < 0 or character_id > 100:
-                    await ctx.send("❌ 캐릭터 ID는 0~100 사이의 값이어야 합니다.")
+                if character_id < 0:
+                    await ctx.send("❌ 캐릭터 ID는 0 이상의 값이어야 합니다.")
                     return
                 
                 if level < 1 or level > 2000:
@@ -3103,9 +3110,10 @@ class SaveCodeBot:
                         load_data[item_slots[i]] = item_id
                 
                 # 세이브코드 생성
-                savecode = self.encoder.encode_savecode(load_data, player_name)
+                savecode = self.encoder.encode_savecode(load_data, player_name, summon_chunk_n=0)
+                display_code = "-".join([savecode[i:i+5] for i in range(0, len(savecode), 5)])
                 
-                # 검증
+                # 검증 (하이픈 유무 무관)
                 is_valid = self.decoder.validate_savecode(savecode, player_name)
                 
                 embed = discord.Embed(
@@ -3116,7 +3124,7 @@ class SaveCodeBot:
                 
                 embed.add_field(
                     name="🔮 생성된 세이브코드",
-                    value=f"```{savecode}```",
+                    value=f"```{display_code}```",
                     inline=False
                 )
                 
