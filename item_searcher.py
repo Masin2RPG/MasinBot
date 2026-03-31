@@ -14,16 +14,14 @@ logger = logging.getLogger(__name__)
 class ItemSearcher:
     """아이템 검색 클래스"""
     
-    def __init__(self, items_file: str = 'items.json', rowcode_file: str = 'items_Rowcode.json'):
+    def __init__(self, items_file: str = 'items_full.json'):
         """
         아이템 검색기 초기화
         
         Args:
-            items_file: 아이템 정보 JSON 파일 경로
-            rowcode_file: 아이템 값 JSON 파일 경로
+            items_file: 아이템 정보 JSON 파일 경로 ({아이템이름: rawcode} 형식)
         """
         self.items_data = self._load_json(items_file)
-        self.items_rowcode_data = self._load_json(rowcode_file)
         
     def _load_json(self, filename: str) -> dict:
         """JSON 파일 로드"""
@@ -75,20 +73,15 @@ class ItemSearcher:
             item_name: 검색할 아이템 이름
             
         Returns:
-            (키, 아이템 정보, 값) 튜플의 리스트
+            (아이템명, 아이템명, rawcode) 튜플의 리스트
         """
         matching_items = []
         search_name = item_name.lower().strip()
         
-        for key, values in self.items_data.items():
-            if isinstance(values, list) and len(values) > 0:
-                for value in values:
-                    if isinstance(value, str):
-                        clean_value = self._clean_item_name(value).lower()
-                        if search_name in clean_value or clean_value in search_name:
-                            if key in self.items_rowcode_data:
-                                matching_items.append((key, value, self.items_rowcode_data[key]))
-                            break
+        for item_name_in_db, rawcode in self.items_data.items():
+            clean_name = self._clean_item_name(item_name_in_db).lower()
+            if search_name in clean_name or clean_name in search_name:
+                matching_items.append((item_name_in_db, item_name_in_db, str(rawcode)))
         
         return matching_items
     
@@ -101,23 +94,18 @@ class ItemSearcher:
             max_results: 최대 결과 개수
             
         Returns:
-            (키, 아이템 정보, 값) 튜플의 리스트
+            (아이템명, 아이템명, rawcode) 튜플의 리스트
         """
         matching_items = []
         search_keyword = keyword.lower().strip()
         
-        for key, values in self.items_data.items():
+        for item_name, rawcode in self.items_data.items():
             if len(matching_items) >= max_results:
                 break
                 
-            if isinstance(values, list) and len(values) > 0:
-                for value in values:
-                    if isinstance(value, str):
-                        clean_value = self._clean_item_name(value).lower()
-                        if search_keyword in clean_value:
-                            if key in self.items_rowcode_data:
-                                matching_items.append((key, value, self.items_rowcode_data[key]))
-                            break
+            clean_name = self._clean_item_name(item_name).lower()
+            if search_keyword in clean_name:
+                matching_items.append((item_name, item_name, str(rawcode)))
         
         return matching_items
     
@@ -130,6 +118,6 @@ class ItemSearcher:
         """
         return {
             'total_items': len(self.items_data),
-            'total_rowcodes': len(self.items_rowcode_data),
-            'matched_items': len([k for k in self.items_data.keys() if k in self.items_rowcode_data])
+            'total_rowcodes': len(self.items_data),
+            'matched_items': len(self.items_data)
         }

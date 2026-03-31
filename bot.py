@@ -2365,9 +2365,10 @@ class SaveCodeBot:
                         elif graduation_status == 'apocalypse':
                             apocalypse_characters.add(hero_name)
                         
-                        # 결과 전송 - Embed 사용
+                        # 결과 전송 - Embed 사용 (아이템 포함 단일 메시지)
                         embed = discord.Embed(
                             title="🎮 세이브코드 분석 결과",
+                            description="아이템 목록은 하단을 확인하세요.",
                             color=0x00ff00 if is_valid else 0xff0000
                         )
                         embed.add_field(name="검증 상태", value=result, inline=True)
@@ -2376,51 +2377,34 @@ class SaveCodeBot:
                         embed.add_field(name="💰 골드", value=f"{save_data.get('gold', 0):,}", inline=True)
                         embed.add_field(name="🌲 나무", value=f"{save_data.get('lumber', 0):,}", inline=True)
                         embed.add_field(name="📈 레벨", value=save_data.get('level', 1), inline=True)
-                        
-                        await ctx.send(embed=embed)
-                        
-                        # 아이템 목록을 모던한 Embed로 표시
+
+                        # 아이템 목록을 한 메시지에 포함 (6개씩 컬럼 배치)
                         if items_list:
-                            items_embed = discord.Embed(
-                                title="🎒 세이브코드 아이템 목록",
-                                description="추출된 아이템들입니다",
-                                color=0x3498db
-                            )
-                            
-                            # 아이템들을 6개씩 나누어서 표시 (인벤토리 슬롯처럼)
                             items_per_row = 3
                             for i in range(0, len(items_list), items_per_row):
-                                batch = items_list[i:i+items_per_row]
-                                slot_numbers = [f"슬롯 {j+1+i}" for j in range(len(batch))]
-                                
+                                batch = items_list[i:i + items_per_row]
                                 field_name = f"📦 아이템 슬롯 {i+1}-{min(i+items_per_row, len(items_list))}"
-                                field_value = ""
-                                
+                                field_lines = []
                                 for j, item in enumerate(batch):
                                     slot_num = i + j + 1
-                                    # 아이템 이름에 따른 이모지 추가
                                     emoji = "⚔️" if "무기" in item or "검" in item or "창" in item else \
-                                           "🛡️" if "방패" in item or "갑옷" in item or "투구" in item else \
-                                           "💍" if "반지" in item or "목걸이" in item else \
-                                           "🧪" if "포션" in item or "물약" in item else \
-                                           "💎" if "젬" in item or "보석" in item else \
-                                           "📜" if "스크롤" in item or "두루마리" in item else \
-                                           "🔮" if "오브" in item or "수정" in item else \
-                                           "⚡" if "룬" in item else \
-                                           "🎯"
-                                    
-                                    field_value += f"{emoji} **{slot_num}.** {item}\n"
-                                
-                                items_embed.add_field(
+                                            "🛡️" if "방패" in item or "갑옷" in item or "투구" in item else \
+                                            "💍" if "반지" in item or "목걸이" in item else \
+                                            "🧪" if "포션" in item or "물약" in item else \
+                                            "💎" if "젬" in item or "보석" in item else \
+                                            "📜" if "스크롤" in item or "두루마리" in item else \
+                                            "🔮" if "오브" in item or "수정" in item else \
+                                            "⚡" if "룬" in item else \
+                                            "🎯"
+                                    field_lines.append(f"{emoji} **{slot_num}.** {item}")
+                                embed.add_field(
                                     name=field_name,
-                                    value=field_value or "빈 슬롯",
+                                    value="\n".join(field_lines) if field_lines else "빈 슬롯",
                                     inline=True
                                 )
-                            
-                            # 총 아이템 개수 표시
-                            items_embed.set_footer(text=f"총 {len(items_list)}개의 아이템이 발견되었습니다")
-                            
-                            await ctx.send(embed=items_embed)
+
+                        embed.set_footer(text=f"총 {len(items_list)}개의 아이템이 발견되었습니다")
+                        await ctx.send(embed=embed)
                         
                     except Exception as e:
                         print(f"[ERROR] 개별 코드 처리 중 오류: {e}")
