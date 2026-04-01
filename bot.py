@@ -2302,6 +2302,8 @@ class SaveCodeBot:
                 uriel_characters = set()  # 우리엘 졸업 캐릭터
                 raphael_characters = set()  # 라파엘 졸업 캐릭터
                 gabriel_characters = set()  # 가브리엘 졸업 캐릭터
+                terminator_characters = set()  # 종결자 졸업 캐릭터
+                mikael_characters = set()  # 미카엘 졸업 캐릭터
                 
                 for code in codes:
                     print(f"[DEBUG] 로드된 코드들: {code}")  # 디버그용 출력
@@ -2356,7 +2358,11 @@ class SaveCodeBot:
                         )
                         
                         # 졸업 상태에 따라 캐릭터를 해당 카테고리에 추가
-                        if graduation_status == 'raphael':
+                        if graduation_status == 'mikael':
+                            mikael_characters.add(hero_name)
+                        elif graduation_status == 'terminator':
+                            terminator_characters.add(hero_name)
+                        elif graduation_status == 'raphael':
                             raphael_characters.add(hero_name)
                         elif graduation_status == 'gabriel':
                             gabriel_characters.add(hero_name)
@@ -2444,6 +2450,16 @@ class SaveCodeBot:
                         inline=True
                     )
                     stats_embed.add_field(
+                        name="🌟 미카엘 졸업", 
+                        value=f"{len(mikael_characters)}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
+                        name="💀 종결자 졸업", 
+                        value=f"{len(terminator_characters)}건", 
+                        inline=True
+                    )
+                    stats_embed.add_field(
                         name="😈 묵시록 레이드 졸업", 
                         value=f"{len(apocalypse_characters)}건", 
                         inline=True
@@ -2495,6 +2511,42 @@ class SaveCodeBot:
                         stats_embed.add_field(
                             name="🔄 중복된 캐릭터",
                             value="중복된 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 미카엘 졸업 캐릭터 목록 추가
+                    if mikael_characters:
+                        mikael_list = ", ".join(sorted(mikael_characters))
+                        if len(mikael_list) > 1024:  # Discord 필드 제한
+                            mikael_list = mikael_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="🌟 미카엘 졸업 캐릭터",
+                            value=mikael_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="🌟 미카엘 졸업 캐릭터",
+                            value="미카엘 졸업 조건(통치자 성흔+집행하는 자 영혼)을 충족한 캐릭터가 없습니다",
+                            inline=False
+                        )
+                    
+                    # 종결자 졸업 캐릭터 목록 추가
+                    if terminator_characters:
+                        terminator_list = ", ".join(sorted(terminator_characters))
+                        if len(terminator_list) > 1024:  # Discord 필드 제한
+                            terminator_list = terminator_list[:1021] + "..."
+                        
+                        stats_embed.add_field(
+                            name="💀 종결자 졸업 캐릭터",
+                            value=terminator_list,
+                            inline=False
+                        )
+                    else:
+                        stats_embed.add_field(
+                            name="💀 종결자 졸업 캐릭터",
+                            value="종결자 졸업 조건(3가지 특수 아이템)을 충족한 캐릭터가 없습니다",
                             inline=False
                         )
                     

@@ -44,6 +44,8 @@ class GraduationChecker:
             'raphael': {'any_of': set(), 'pairs': []},
             'gabriel': {'any_of': set(), 'pairs': []},
             'uriel': {'any_of': set(), 'pairs': []},
+            'terminator': {'any_of': set(), 'pairs': []},
+            'mikael': {'any_of': set(), 'pairs': []},
         }
 
         try:
@@ -67,6 +69,10 @@ class GraduationChecker:
                 'any_of': normalized_any,
                 'pairs': normalized_pairs,
             }
+            
+            # combined_conditions 처리 (미카엘용)
+            if 'combined_conditions' in rule_data:
+                normalized[raid_name]['combined_conditions'] = rule_data['combined_conditions']
 
         return normalized
     
@@ -213,6 +219,24 @@ class GraduationChecker:
         if not rules:
             return False
 
+        # all_of 규칙 (모든 아이템 필요) - 종결자용
+        all_of = rules.get('all_of', [])
+        if all_of:
+            if all(item_id in item_ids for item_id in all_of):
+                return True
+
+        # combined_conditions 규칙 (여러 그룹에서 각각 하나씩) - 미카엘용
+        combined_conditions = rules.get('combined_conditions', {})
+        if combined_conditions:
+            group1 = combined_conditions.get('group1_any', [])
+            group2 = combined_conditions.get('group2_any', [])
+            
+            has_group1 = any(item_id in item_ids for item_id in group1)
+            has_group2 = any(item_id in item_ids for item_id in group2)
+            
+            if has_group1 and has_group2:
+                return True
+
         # 쌍(모두 필요) 규칙
         pairs = rules.get('pairs', [])
         if pairs:
@@ -241,6 +265,11 @@ class GraduationChecker:
         # ID 기반 규칙이 우선이며, 실패 시 문자열 매칭으로 폴백
         if item_ids is not None:
             item_id_set = set(item_ids)
+            # 우선순위: 미카엘 > 종결자 > 가브리엘 > 라파엘 > 우리엘 > 묵시록
+            if self._check_raid_by_ids(item_id_set, 'mikael'):
+                return 'mikael'
+            if self._check_raid_by_ids(item_id_set, 'terminator'):
+                return 'terminator'
             if self._check_raid_by_ids(item_id_set, 'gabriel'):
                 return 'gabriel'
             if self._check_raid_by_ids(item_id_set, 'raphael'):
@@ -277,6 +306,8 @@ class GraduationChecker:
             (이모지, 이름) 튜플
         """
         status_map = {
+            'mikael': ('🌟', '미카엘 졸업'),
+            'terminator': ('💀', '종결자 졸업'),
             'raphael': ('🕊️', '라파엘 졸업'),
             'gabriel': ('⚔️', '가브리엘 졸업'),
             'uriel': ('👼', '우리엘 졸업'),
